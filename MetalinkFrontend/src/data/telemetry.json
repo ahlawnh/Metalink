@@ -1,12 +1,17 @@
 {
   "schemaVersion": "0.1.0",
-  "sessionId": "mock-session-911-az-07",
+  "session": {
+    "id": "mock-session-911-az-07",
+    "incident_type": "suspected-overdose",
+    "caller_label": "Bystander A",
+    "started_at": "2026-05-02T11:59:20.000Z"
+  },
   "updatedAt": "2026-05-02T12:00:00.000Z",
-  "vitals": {
-    "respiratoryRate": 22,
-    "heartRate": 114,
-    "oxygenSaturation": 91,
-    "temperatureC": 37.3
+  "respiratory": {
+    "estimated_respiratory_rate": 22,
+    "respiratory_status": "watch",
+    "confidence": 0.83,
+    "source": "mock"
   },
   "hazards": [
     {
@@ -43,5 +48,22 @@
   "video": {
     "posterUrl": "/assets/hero.png",
     "streamStatus": "connecting"
+  },
+  "operator": {
+    "heart_rate_bpm": 78
+  },
+  "caller_location": {
+    "label": "Near City Hall · San Francisco (mock fused GPS)",
+    "latitude": 37.779379,
+    "longitude": -122.418853,
+    "accuracy_m": 14,
+    "updated_at": "2026-05-02T12:00:00.000Z"
+  },
+  "patient_heart": {
+    "heart_rate_bpm": 128,
+    "mode": "compensatory_tachycardia",
+    "dispatcher_notice": "Sustained HR climb with jitter on RPPG trace — treat as compensated shock pattern until airway and perfusion reassessed.",
+    "signal_source": "mock",
+    "history_bpm": [76, 78, 82, 91, 99, 108, 115, 122, 126, 128, 129, 128]
   }
 }

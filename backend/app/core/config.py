@@ -38,7 +38,12 @@ class Settings(BaseModel):
     livekit_identity: str = "aegis-link-backend"
     frame_sample_interval_seconds: float = 2.5
     telemetry_coalesce_ms: float = 100.0
-    cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    cors_origins: list[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
 
 
 @lru_cache
@@ -46,7 +51,11 @@ def get_settings() -> Settings:
     load_env()
     cors_origins = [
         origin.strip()
-        for origin in os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
+        for origin in os.getenv(
+            "CORS_ORIGINS",
+            "http://localhost:3000,http://127.0.0.1:3000,"
+            "http://localhost:5173,http://127.0.0.1:5173",
+        ).split(",")
         if origin.strip()
     ]
     return Settings(
