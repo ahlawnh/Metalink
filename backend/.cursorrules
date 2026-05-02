@@ -1,0 +1,13 @@
+You are working only in the backend folder.
+
+Priorities:
+- Prefer small, testable Python modules.
+- Keep API contracts in `backend/app/schemas/` using Pydantic.
+- Keep environment/config in `backend/app/core/` and load `.env` there.
+- Keep HTTP/WebSocket endpoints in `backend/app/api/`.
+- Keep business logic / integrations in `backend/app/services/`.
+
+Conventions:
+- No secrets in git. Use `.env` locally and `.env.example` for templates.
+- Use type hints everywhere.
+- Prefer FastAPI for HTTP and WebSocket endpoints.
