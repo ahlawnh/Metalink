@@ -1,0 +1,10 @@
+{
+  "name": "metalink",
+  "private": true,
+  "description": "Run the dashboard from the repo root.",
+  "scripts": {
+    "dev": "npm run dev --prefix MetalinkFrontend",
+    "build": "npm run build --prefix MetalinkFrontend",
+    "preview": "npm run preview --prefix MetalinkFrontend"
+  }
+}
