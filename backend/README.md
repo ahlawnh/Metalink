@@ -62,12 +62,38 @@ ws://127.0.0.1:8000/api/ws/telemetry
 
 Optional query: `?scenario=overdose_case` (see `/api/telemetry/scenarios`).
 
-On connect, the server sends an initial mock `TELEMETRY_UPDATE`. With `MOCK_AI=true` and `ENABLE_INGESTION_LOOP=true`, the ingestion task also **broadcasts** updates from the mock pipeline (vision + transcript aggregation).
+Every WebSocket message uses the v2 envelope:
+
+```json
+{
+  "schema_version": "v2",
+  "event_type": "telemetry.update",
+  "timestamp": "2026-05-02T12:00:00.000000Z",
+  "payload": {}
+}
+```
+
+On connect, the server sends `pipeline.status`, `heartbeat`, then an initial `telemetry.update` snapshot. With `MOCK_AI=true` and `ENABLE_INGESTION_LOOP=true`, the ingestion task also **broadcasts** updates from the mock pipeline (vision + transcript aggregation).
 
 **CLI test** (if [websocat](https://github.com/vi/websocat) is installed):
 
 ```bash
 websocat ws://127.0.0.1:8000/api/ws/telemetry
+```
+
+Full frontend contract: `docs/TELEMETRY_API.md`. Sample payloads: `fixtures/websocket_event_samples.json`.
+
+## Tests
+
+```bash
+python3 -m pytest tests/ -v
+python3 -m compileall app -q
+```
+
+Optional 5-minute WebSocket soak:
+
+```bash
+STABILITY_TEST=1 python3 -m pytest tests/test_smoke.py::test_websocket_five_minute_stability -v
 ```
 
 ## Project layout (hackathon silos)

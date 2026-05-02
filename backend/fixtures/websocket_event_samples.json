@@ -1,0 +1,48 @@
+[
+  {
+    "schema_version": "v2",
+    "event_type": "pipeline.status",
+    "timestamp": "2026-05-02T12:00:00.000000Z",
+    "payload": {
+      "timestamp": "2026-05-02T12:00:00.000000Z",
+      "pipeline_status": "mock",
+      "message": "Connected to telemetry stream using overdose_case",
+      "mock_ai": true,
+      "connected_clients": 1
+    }
+  },
+  {
+    "schema_version": "v2",
+    "event_type": "telemetry.update",
+    "timestamp": "2026-05-02T12:00:01.000000Z",
+    "payload": {
+      "timestamp": "2026-05-02T12:00:01.000000Z",
+      "scene_hazards": [{ "item": "Needle or syringe on floor", "confidence": 0.88 }],
+      "substances": [{ "item": "Orange prescription pill bottle", "confidence": 0.81 }],
+      "patient_position": "supine",
+      "cyanosis_flag": { "detected": true, "confidence": 0.73 },
+      "resp_rate_estimate": { "value": 8, "method": "voice_cadence", "confidence": 0.79 },
+      "consciousness_level": "unresponsive",
+      "transcript_snippet": "Bystander says breathe every several seconds; no patient response heard.",
+      "pipeline_status": "mock",
+      "critical_alerts": [
+        {
+          "id": "overdose-low-respiration",
+          "severity": "critical",
+          "title": "Low Respiratory Rate",
+          "message": "Estimated breathing cadence is below emergency threshold. Verify immediately.",
+          "confidence": 0.79,
+          "source": "mock"
+        }
+      ],
+      "bystander_stress": { "score": 0.78, "label": "elevated", "confidence": 0.72 },
+      "heart_rate_rppg": {
+        "value": 102,
+        "confidence": 0.41,
+        "disclaimer": "Experimental camera-derived estimate; not a medical device."
+      },
+      "agonal_breathing": { "suspected": true, "confidence": 0.55 },
+      "haptic_cue": { "active": true, "pattern": "cpr_metronome", "bpm": 110 }
+    }
+  }
+]

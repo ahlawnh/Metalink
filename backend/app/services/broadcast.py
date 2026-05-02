@@ -1,22 +1,24 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Union
+from typing import Any, Optional, Union
 
-from app.core.websocket_manager import telemetry_manager
+from app.core.outbound_coalesce import telemetry_coalescer
 from app.schemas.telemetry import (
+    AgonalBreathingSignal,
     AlertSeverity,
+    BystanderStress,
     ConsciousnessLevel,
     CriticalAlert,
     CyanosisFlag,
     DetectedItem,
-    EventType,
+    HeartRateRppgEstimate,
+    HapticCue,
     PatientPosition,
     PipelineStatus,
     RespirationMethod,
     RespRateEstimate,
     TelemetryUpdate,
-    WebSocketEvent,
 )
 
 
@@ -55,6 +57,63 @@ def _pipeline_status() -> PipelineStatus:
     return PipelineStatus.MOCK if os.getenv("MOCK_AI", "true").lower() in {"1", "true", "yes", "on"} else PipelineStatus.LIVE
 
 
+def _optional_bystander_stress(raw: Any) -> Optional[BystanderStress]:
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return BystanderStress(
+            score=_confidence(raw.get("score"), default=0.5),
+            label=str(raw.get("label") or ""),
+            confidence=_confidence(raw.get("confidence"), default=0.5),
+        )
+    except Exception:
+        return None
+
+
+def _optional_heart_rate_rppg(raw: Any) -> Optional[HeartRateRppgEstimate]:
+    if not isinstance(raw, dict):
+        return None
+    try:
+        val = raw.get("value")
+        v = int(val) if isinstance(val, (int, float)) else None
+        return HeartRateRppgEstimate(
+            value=v,
+            confidence=_confidence(raw.get("confidence"), default=0.0),
+            disclaimer=str(
+                raw.get("disclaimer")
+                or "Experimental camera-derived estimate; not a medical device."
+            ),
+        )
+    except Exception:
+        return None
+
+
+def _optional_agional_breathing(raw: Any) -> Optional[AgonalBreathingSignal]:
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return AgonalBreathingSignal(
+            suspected=bool(raw.get("suspected", False)),
+            confidence=_confidence(raw.get("confidence"), default=0.0),
+        )
+    except Exception:
+        return None
+
+
+def _optional_haptic_cue(raw: Any) -> Optional[HapticCue]:
+    if not isinstance(raw, dict):
+        return None
+    try:
+        pattern = raw.get("pattern") or "none"
+        if pattern not in ("none", "cpr_metronome"):
+            pattern = "none"
+        bpm = raw.get("bpm")
+        bpm_i = int(bpm) if isinstance(bpm, (int, float)) else None
+        return HapticCue(active=bool(raw.get("active", False)), pattern=pattern, bpm=bpm_i)
+    except Exception:
+        return None
+
+
 def telemetry_from_service_payload(payload: dict[str, Any]) -> TelemetryUpdate:
     vitals = payload.get("vitals") if isinstance(payload.get("vitals"), dict) else {}
     hazards = payload.get("hazards") if isinstance(payload.get("hazards"), list) else []
@@ -75,6 +134,13 @@ def telemetry_from_service_payload(payload: dict[str, Any]) -> TelemetryUpdate:
             )
         )
 
+    agonal = _optional_agional_breathing(payload.get("agonal_breathing"))
+    if agonal is None and payload.get("agonal_breathing_suspected") is not None:
+        agonal = AgonalBreathingSignal(
+            suspected=bool(payload.get("agonal_breathing_suspected")),
+            confidence=_confidence(payload.get("agonal_breathing_confidence"), default=0.0),
+        )
+
     return TelemetryUpdate(
         scene_hazards=[_map_hazard(hazard) for hazard in hazards if isinstance(hazard, dict)],
         substances=[],
@@ -89,25 +155,16 @@ def telemetry_from_service_payload(payload: dict[str, Any]) -> TelemetryUpdate:
         transcript_snippet=transcript,
         pipeline_status=_pipeline_status(),
         critical_alerts=critical_alerts,
+        bystander_stress=_optional_bystander_stress(payload.get("bystander_stress")),
+        heart_rate_rppg=_optional_heart_rate_rppg(payload.get("heart_rate_rppg")),
+        agonal_breathing=agonal,
+        haptic_cue=_optional_haptic_cue(payload.get("haptic_cue")),
     )
 
 
 async def broadcast_telemetry(payload: Union[dict[str, Any], TelemetryUpdate]) -> None:
     telemetry = payload if isinstance(payload, TelemetryUpdate) else telemetry_from_service_payload(payload)
-    await telemetry_manager.broadcast(
-        WebSocketEvent(
-            event_type=EventType.TELEMETRY_UPDATE,
-            payload=telemetry,
-        )
-    )
-
-    for alert in telemetry.critical_alerts:
-        await telemetry_manager.broadcast(
-            WebSocketEvent(
-                event_type=EventType.ALERT_CRITICAL,
-                payload=alert,
-            )
-        )
+    await telemetry_coalescer.submit(telemetry)
 
 
 async def broadcast_transcript(event: dict[str, Any]) -> None:
