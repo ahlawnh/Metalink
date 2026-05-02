@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "0.1.0",
+  "sessionId": "mock-session",
+  "updatedAt": "2026-05-02T12:00:00.000Z",
+  "vitals": {},
+  "hazards": [],
+  "transcript": [],
+  "video": {
+    "posterUrl": null,
+    "streamStatus": "disconnected"
+  }
+}
