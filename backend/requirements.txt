@@ -6,3 +6,4 @@ openai
 deepgram-sdk
 livekit
 pillow
+pytest>=8.0.0

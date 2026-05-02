@@ -4,11 +4,15 @@ from typing import Optional
 
 from app.core.constants import DEFAULT_MOCK_SCENARIO, SUPPORTED_MOCK_SCENARIOS
 from app.schemas.telemetry import (
+    AgonalBreathingSignal,
     AlertSeverity,
+    BystanderStress,
     ConsciousnessLevel,
     CriticalAlert,
     CyanosisFlag,
     DetectedItem,
+    HapticCue,
+    HeartRateRppgEstimate,
     PatientPosition,
     PipelineStatus,
     RespirationMethod,
@@ -78,6 +82,14 @@ def _overdose_case(sequence: int) -> TelemetryUpdate:
                 source="mock",
             )
         ],
+        bystander_stress=BystanderStress(score=0.78, label="elevated", confidence=0.72),
+        heart_rate_rppg=HeartRateRppgEstimate(value=102, confidence=0.41),
+        agonal_breathing=AgonalBreathingSignal(suspected=sequence % 3 == 0, confidence=0.55),
+        haptic_cue=(
+            HapticCue(active=True, pattern="cpr_metronome", bpm=110)
+            if sequence % 5 == 0
+            else HapticCue()
+        ),
     )
 
 

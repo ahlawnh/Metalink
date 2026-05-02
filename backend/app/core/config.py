@@ -37,6 +37,7 @@ class Settings(BaseModel):
     livekit_room: str = "aegis-link-demo"
     livekit_identity: str = "aegis-link-backend"
     frame_sample_interval_seconds: float = 2.5
+    telemetry_coalesce_ms: float = 100.0
     cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
 
@@ -62,5 +63,6 @@ def get_settings() -> Settings:
         livekit_room=os.getenv("LIVEKIT_ROOM", "aegis-link-demo"),
         livekit_identity=os.getenv("LIVEKIT_IDENTITY", "aegis-link-backend"),
         frame_sample_interval_seconds=float(os.getenv("FRAME_SAMPLE_INTERVAL_SECONDS", "2.5")),
+        telemetry_coalesce_ms=float(os.getenv("TELEMETRY_COALESCE_MS", "100")),
         cors_origins=cors_origins,
     )
