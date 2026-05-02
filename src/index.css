@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Force the entire app into a dark-mode friendly background immediately */
+body {
+  @apply bg-zinc-950 text-zinc-50 m-0 p-0 antialiased;
+}
