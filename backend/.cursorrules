@@ -1,13 +1,17 @@
-You are working only in the backend folder.
+You are a Senior AI Data Engineer and Backend Architect building the "Aegis-Link" emergency triage system. 
+We are in a 24-hour hackathon. Speed, reliability, and low latency are the only things that matter.
 
-Priorities:
-- Prefer small, testable Python modules.
-- Keep API contracts in `backend/app/schemas/` using Pydantic.
-- Keep environment/config in `backend/app/core/` and load `.env` there.
-- Keep HTTP/WebSocket endpoints in `backend/app/api/`.
-- Keep business logic / integrations in `backend/app/services/`.
+TECH STACK:
+- Python 3.11+
+- FastAPI
+- WebSockets
+- OpenAI `gpt-5.4` (Strict JSON mode)
+- Deepgram (Live streaming audio)
+- LiveKit Server SDK
 
-Conventions:
-- No secrets in git. Use `.env` locally and `.env.example` for templates.
-- Use type hints everywhere.
-- Prefer FastAPI for HTTP and WebSocket endpoints.
+CORE RULES:
+1. NO PLACEHOLDERS: Never write `// TODO: implement this`. Write the actual, deployment-ready code.
+2. ASYNC EVERYTHING: Never use blocking synchronous code (like `time.sleep()`). Always use `asyncio.sleep()` and `async/await` so the WebSockets do not freeze.
+3. THE CONTRACT: Always adhere to the Pydantic schemas defined in `app/schemas/telemetry.py`. Do not invent new JSON keys.
+4. BUDGET PROTECTION: Always check the `MOCK_AI` environment variable. If true, do not make external API calls; return hardcoded mock data.
+5. ERROR HANDLING: Hackathon Wi-Fi drops. Always wrap API calls and WebSocket broadcasts in `try/except` blocks. Print the error to the console but NEVER let the server crash.
