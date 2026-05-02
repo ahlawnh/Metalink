@@ -7,7 +7,7 @@ from typing import Literal, Optional, Union
 from pydantic import BaseModel, Field
 
 
-SCHEMA_VERSION = "v1"
+SCHEMA_VERSION = "v2"
 
 
 def utc_now() -> datetime:
@@ -79,6 +79,35 @@ class CriticalAlert(BaseModel):
     source: Literal["vision", "audio", "system", "mock"]
 
 
+class BystanderStress(BaseModel):
+    """NLP-derived panic/stress level from transcript (experimental)."""
+
+    score: float = Field(..., ge=0.0, le=1.0)
+    label: str = ""
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class HeartRateRppgEstimate(BaseModel):
+    """Experimental camera-derived heart rate hint; not a medical device."""
+
+    value: Optional[int] = Field(default=None, ge=30, le=220)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    disclaimer: str = "Experimental camera-derived estimate; not a medical device."
+
+
+class AgonalBreathingSignal(BaseModel):
+    suspected: bool = False
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class HapticCue(BaseModel):
+    """PWA (Hacker 1) should interpret; backend only signals intent."""
+
+    active: bool = False
+    pattern: Literal["none", "cpr_metronome"] = "none"
+    bpm: Optional[int] = Field(default=None, ge=60, le=140)
+
+
 class TelemetryUpdate(BaseModel):
     timestamp: datetime = Field(default_factory=utc_now)
     scene_hazards: list[DetectedItem] = Field(default_factory=list)
@@ -90,6 +119,11 @@ class TelemetryUpdate(BaseModel):
     transcript_snippet: str = ""
     pipeline_status: PipelineStatus = PipelineStatus.MOCK
     critical_alerts: list[CriticalAlert] = Field(default_factory=list)
+    # V3 / winning-edge optional fields (services may omit; frontend treats as optional)
+    bystander_stress: Optional[BystanderStress] = None
+    heart_rate_rppg: Optional[HeartRateRppgEstimate] = None
+    agonal_breathing: Optional[AgonalBreathingSignal] = None
+    haptic_cue: Optional[HapticCue] = None
 
 
 class PipelineStatusUpdate(BaseModel):
@@ -107,7 +141,7 @@ class Heartbeat(BaseModel):
 
 
 class WebSocketEvent(BaseModel):
-    schema_version: Literal["v1"] = SCHEMA_VERSION
+    schema_version: Literal["v2"] = SCHEMA_VERSION
     event_type: EventType
     timestamp: datetime = Field(default_factory=utc_now)
     payload: Union[TelemetryUpdate, PipelineStatusUpdate, CriticalAlert, Heartbeat]

@@ -1,11 +1,15 @@
 from app.schemas.telemetry import (
+    AgonalBreathingSignal,
     AlertSeverity,
+    BystanderStress,
     ConsciousnessLevel,
     CriticalAlert,
     CyanosisFlag,
     DetectedItem,
     EventType,
     Heartbeat,
+    HeartRateRppgEstimate,
+    HapticCue,
     PatientPosition,
     PipelineStatus,
     PipelineStatusUpdate,
@@ -17,13 +21,17 @@ from app.schemas.telemetry import (
 )
 
 __all__ = [
+    "AgonalBreathingSignal",
     "AlertSeverity",
+    "BystanderStress",
     "ConsciousnessLevel",
     "CriticalAlert",
     "CyanosisFlag",
     "DetectedItem",
     "EventType",
     "Heartbeat",
+    "HeartRateRppgEstimate",
+    "HapticCue",
     "PatientPosition",
     "PipelineStatus",
     "PipelineStatusUpdate",
@@ -33,4 +41,3 @@ __all__ = [
     "TelemetryUpdate",
     "WebSocketEvent",
 ]
-
