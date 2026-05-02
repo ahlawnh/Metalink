@@ -1,0 +1,135 @@
+from __future__ import annotations
+
+import json
+import os
+import random
+from dataclasses import dataclass
+from typing import Any, Optional
+
+
+@dataclass(frozen=True)
+class VisionResult:
+    hazards: list[dict[str, Any]]
+    vitals: dict[str, Any]
+    ai_dispatcher_alert: str
+
+
+def _mock_vision(seed: Optional[int] = None) -> VisionResult:
+    rng = random.Random(seed)
+    hazards: list[dict[str, Any]] = []
+
+    roll = rng.random()
+    if roll < 0.33:
+        hazards.append(
+            {"type": "paraphernalia", "description": "Needles/syringe visible on surface", "confidence": 0.88}
+        )
+        alert = "Scene hazard: needles visible—advise caution to responders."
+    elif roll < 0.66:
+        hazards.append({"type": "paraphernalia", "description": "Foil and lighter present", "confidence": 0.77})
+        alert = "Possible substance paraphernalia detected; consider Narcan guidance."
+    else:
+        hazards.append({"type": "paraphernalia", "description": "Unmarked orange pill bottle", "confidence": 0.71})
+        alert = "Possible pills present; ask bystander what was taken if safe."
+
+    vitals = {"estimated_respiratory_rate": 0, "chest_rise_detected": rng.random() < 0.35}
+    return VisionResult(hazards=hazards, vitals=vitals, ai_dispatcher_alert=alert)
+
+
+VISION_SYSTEM_PROMPT = """You are Aegis-Link Vision Triage, an AI assistant for emergency dispatch telemetry.
+Your job is NOT to diagnose. Your job is to extract scene safety hazards and simple observable cues from a single image frame and produce a compact JSON object for a dispatcher dashboard.
+
+Rules:
+- Output MUST be valid JSON and MUST match the schema exactly. No markdown, no extra keys, no commentary.
+- Be conservative. Prefer "unknown" over guessing.
+- Only report what is visually observable in the frame.
+- If the frame is too blurry/dark/occluded, return empty hazards and set low-confidence.
+- Never identify a person. No age, gender, race, identity. Do not speculate.
+- Time budget: optimize for speed and minimal tokens.
+
+Schema (exact):
+{
+  "hazards": [
+    { "type": "paraphernalia|weapon|fire|smoke|blood|pills|needles|unknown", "description": "string", "confidence": 0.0 }
+  ],
+  "patient_position": "supine|prone|side_recovery|seated|unknown",
+  "cyanosis_detected": true,
+  "bystander_action": "cpr|narcan_present|none|unknown",
+  "chest_rise_visible": true,
+  "estimated_respiratory_rate": 0,
+  "ai_dispatcher_alert": "string"
+}
+"""
+
+
+async def analyze_frame_with_gpt54(
+    *,
+    frame_b64_jpeg: str,
+    model: str = "gpt-5.4",
+    openai_api_key: Optional[str] = None,
+    mock_ai: bool = False,
+    seed: Optional[int] = None,
+) -> VisionResult:
+    """
+    Returns a VisionResult suitable for merging into the shared telemetry contract.
+
+    This stays self-contained in app/services for Hacker 2. It intentionally does not
+    depend on Hacker 4 schemas; Hacker 4 can validate at the broadcaster boundary.
+    """
+
+    if mock_ai or os.getenv("MOCK_AI", "").lower() in {"1", "true", "yes"}:
+        return _mock_vision(seed=seed)
+
+    # Optional dependency: do not hard-require OpenAI SDK during early mock phase.
+    try:
+        from openai import AsyncOpenAI  # type: ignore
+    except Exception as e:  # pragma: no cover
+        raise RuntimeError(
+            "OpenAI SDK not installed. Either set MOCK_AI=true or install openai."
+        ) from e
+
+    api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("Missing OPENAI_API_KEY. Either set MOCK_AI=true or provide the key.")
+
+    client = AsyncOpenAI(api_key=api_key)
+
+    # NOTE: We keep the request shape intentionally simple to avoid fighting SDK/version
+    # differences during a hackathon. If the SDK changes, you update only this function.
+    resp = await client.responses.create(
+        model=model,
+        input=[
+            {
+                "role": "system",
+                "content": [{"type": "input_text", "text": VISION_SYSTEM_PROMPT}],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": "Analyze this single frame."},
+                    {"type": "input_image", "image_url": f"data:image/jpeg;base64,{frame_b64_jpeg}"},
+                ],
+            },
+        ],
+        # Try to force JSON. If the SDK/model doesn't support it, we'll fall back to parsing.
+        response_format={"type": "json_object"},
+    )
+
+    text = getattr(resp, "output_text", None)
+    if not text:
+        # Fallback: attempt to find a text output segment
+        try:
+            text = resp.output[0].content[0].text  # type: ignore[attr-defined]
+        except Exception:
+            raise RuntimeError("OpenAI response missing output_text; cannot parse.")
+
+    data = json.loads(text)
+
+    hazards = data.get("hazards") or []
+    vitals = {
+        "estimated_respiratory_rate": int(data.get("estimated_respiratory_rate") or 0),
+        "chest_rise_detected": bool(data.get("chest_rise_visible") or False),
+    }
+    alert = str(data.get("ai_dispatcher_alert") or "No obvious scene hazards detected.")
+
+    return VisionResult(hazards=hazards, vitals=vitals, ai_dispatcher_alert=alert)
+
