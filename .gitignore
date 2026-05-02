@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 # Local env files (never commit secrets)
 .env
 .env.local
@@ -8,21 +9,50 @@
 # Xcode
 #
 # gitignore contributors: remember to update Global/Xcode.gitignore, Objective-C.gitignore & Swift.gitignore
+=======
+# Environment
+.env
+.env.*
+!.env.example
+!.env*.example
+.env.local
+.env.*.local
+>>>>>>> Stashed changes
 
-## User settings
+# Node / Vite
+node_modules/
+dist/
+dist-ssr/
+*.tsbuildinfo
+coverage/
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Xcode / iOS
 xcuserdata/
-
-## Obj-C/Swift specific
 *.hmap
-
-## App packaging
 *.ipa
 *.dSYM.zip
 *.dSYM
-
-## Playgrounds
 timeline.xctimeline
 playground.xcworkspace
+<<<<<<< Updated upstream
 
 # Swift Package Manager
 #
@@ -63,6 +93,10 @@ Carthage/Build/
 # For more information about the recommended setup visit:
 # https://docs.fastlane.tools/best-practices/source-control/#source-control
 
+=======
+.build/
+Carthage/Build/
+>>>>>>> Stashed changes
 fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png

@@ -1,12 +1,47 @@
 {
   "schemaVersion": "0.1.0",
-  "sessionId": "mock-session",
+  "sessionId": "mock-session-911-az-07",
   "updatedAt": "2026-05-02T12:00:00.000Z",
-  "vitals": {},
-  "hazards": [],
-  "transcript": [],
+  "vitals": {
+    "respiratoryRate": 22,
+    "heartRate": 114,
+    "oxygenSaturation": 91,
+    "temperatureC": 37.3
+  },
+  "hazards": [
+    {
+      "id": "hz-1",
+      "type": "smoke",
+      "severity": "high",
+      "confidence": 0.92,
+      "detectedAt": "2026-05-02T11:59:52.000Z",
+      "description": "Dense smoke is visible near the ceiling."
+    },
+    {
+      "id": "hz-2",
+      "type": "downed power line",
+      "severity": "critical",
+      "confidence": 0.86,
+      "detectedAt": "2026-05-02T11:59:44.000Z",
+      "description": "Possible energized line across the roadway."
+    }
+  ],
+  "transcript": [
+    {
+      "id": "tx-1",
+      "speaker": "caller",
+      "text": "He's breathing fast and coughing, we can barely see.",
+      "timestamp": "2026-05-02T11:59:35.000Z"
+    },
+    {
+      "id": "tx-2",
+      "speaker": "dispatcher",
+      "text": "Move away from the smoke source and keep the camera steady.",
+      "timestamp": "2026-05-02T11:59:42.000Z"
+    }
+  ],
   "video": {
-    "posterUrl": null,
-    "streamStatus": "disconnected"
+    "posterUrl": "/assets/hero.png",
+    "streamStatus": "connecting"
   }
 }
