@@ -12,6 +12,9 @@ class VisionResult:
     hazards: list[dict[str, Any]]
     vitals: dict[str, Any]
     ai_dispatcher_alert: str
+    patient_position: str = "unknown"
+    cyanosis_detected: bool = False
+    bystander_action: str = "unknown"
 
 
 def _mock_vision(seed: Optional[int] = None) -> VisionResult:
@@ -31,12 +34,22 @@ def _mock_vision(seed: Optional[int] = None) -> VisionResult:
         hazards.append({"type": "paraphernalia", "description": "Unmarked orange pill bottle", "confidence": 0.71})
         alert = "Possible pills present; ask bystander what was taken if safe."
 
+    positions = ["supine", "prone", "side_recovery", "seated", "unknown"]
     vitals = {"estimated_respiratory_rate": 0, "chest_rise_detected": rng.random() < 0.35}
-    return VisionResult(hazards=hazards, vitals=vitals, ai_dispatcher_alert=alert)
+    return VisionResult(
+        hazards=hazards,
+        vitals=vitals,
+        ai_dispatcher_alert=alert,
+        patient_position=positions[rng.randint(0, len(positions) - 1)],
+        cyanosis_detected=rng.random() < 0.2,
+        bystander_action="unknown",
+    )
 
 
 VISION_SYSTEM_PROMPT = """You are Aegis-Link Vision Triage, an AI assistant for emergency dispatch telemetry.
 Your job is NOT to diagnose. Your job is to extract scene safety hazards and simple observable cues from a single image frame and produce a compact JSON object for a dispatcher dashboard.
+
+Image context: This frame comes from a bystander's **phone camera** (handheld or shirt-pocket). Expect motion blur, partial framing, glare, and uneven exposure. When in doubt, use "unknown" and lower confidence—do not invent scene details.
 
 Rules:
 - Output MUST be valid JSON and MUST match the schema exactly. No markdown, no extra keys, no commentary.
@@ -130,6 +143,16 @@ async def analyze_frame_with_gpt54(
         "chest_rise_detected": bool(data.get("chest_rise_visible") or False),
     }
     alert = str(data.get("ai_dispatcher_alert") or "No obvious scene hazards detected.")
+    patient_position = str(data.get("patient_position") or "unknown")
+    cyanosis_detected = bool(data.get("cyanosis_detected"))
+    bystander_action = str(data.get("bystander_action") or "unknown")
 
-    return VisionResult(hazards=hazards, vitals=vitals, ai_dispatcher_alert=alert)
+    return VisionResult(
+        hazards=hazards,
+        vitals=vitals,
+        ai_dispatcher_alert=alert,
+        patient_position=patient_position,
+        cyanosis_detected=cyanosis_detected,
+        bystander_action=bystander_action,
+    )
 

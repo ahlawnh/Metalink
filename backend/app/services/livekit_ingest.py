@@ -7,7 +7,12 @@ import time
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from app.services.telemetry_aggregate import TelemetryState, publish_telemetry, publish_transcript_event
+from app.services.telemetry_aggregate import (
+    TelemetryState,
+    publish_telemetry,
+    publish_transcript_event,
+    record_transcript_side_effects,
+)
 from app.services.transcription import TranscriptChunk, deepgram_stream_from_pcm16, mock_transcript_stream
 from app.services.vision import VisionResult, analyze_frame_with_gpt54
 
@@ -24,6 +29,33 @@ class LiveKitConfig:
 
 def _is_mock() -> bool:
     return os.getenv("MOCK_AI", "").lower() in {"1", "true", "yes"}
+
+
+def _track_is_screen_share(track: Any) -> bool:
+    """Prefer phone camera over screen-share if both exist (e.g. accidental share)."""
+    src = getattr(track, "source", None)
+    if src is None:
+        return False
+    label = str(src).upper()
+    return "SCREEN" in label
+
+
+def _pick_preferred_camera_video_track(tracks: list[Any]) -> Optional[Any]:
+    if not tracks:
+        return None
+    cameras = [t for t in tracks if not _track_is_screen_share(t)]
+    return cameras[0] if cameras else tracks[0]
+
+
+def _vision_to_state_dict(vr: VisionResult) -> dict[str, Any]:
+    return {
+        "hazards": vr.hazards,
+        "vitals": vr.vitals,
+        "ai_dispatcher_alert": vr.ai_dispatcher_alert,
+        "patient_position": vr.patient_position,
+        "cyanosis_detected": vr.cyanosis_detected,
+        "bystander_action": vr.bystander_action,
+    }
 
 
 async def _downscale_jpeg_to_max_width(jpeg_bytes: bytes, max_width: int = 768, quality: int = 70) -> bytes:
@@ -61,6 +93,7 @@ async def run_ingestion_loop(
     Hacker 2: core loop.
 
     - Join LiveKit room as hidden participant (when not MOCK_AI).
+    - Video: expect **phone PWA camera** (Meta glasses are BT audio only for this sprint).
     - Every N seconds: capture latest frame, downscale, base64, send to vision.
     - Stream audio to Deepgram and publish transcript events.
     - After every update, call Hacker 4 broadcaster via publish_* helpers.
@@ -92,26 +125,29 @@ async def run_ingestion_loop(
     room = rtc.Room()
     await room.connect(cfg.url, token)
 
-    # Wait for first remote participant + tracks
-    video_track: Optional[Any] = None
+    # Collect tracks (multiple video tracks possible; prefer camera over screen-share).
+    video_tracks: list[Any] = []
     audio_track: Optional[Any] = None
 
     async def on_track_subscribed(track: Any, *_: Any) -> None:
-        nonlocal video_track, audio_track
+        nonlocal audio_track
         kind = getattr(track, "kind", None)
-        if str(kind).lower().endswith("video") and video_track is None:
-            video_track = track
-        if str(kind).lower().endswith("audio") and audio_track is None:
+        k = str(kind).lower()
+        if "video" in k:
+            video_tracks.append(track)
+        elif "audio" in k and audio_track is None:
             audio_track = track
 
     room.on("track_subscribed", on_track_subscribed)
 
     # Spin until we have at least video or audio.
     started = time.time()
-    while video_track is None and audio_track is None:
+    while not video_tracks and audio_track is None:
         if time.time() - started > 20:
             raise RuntimeError("Timed out waiting for LiveKit tracks.")
         await asyncio.sleep(0.1)
+
+    video_track = _pick_preferred_camera_video_track(video_tracks)
 
     tasks: list[asyncio.Task[None]] = []
     if video_track is not None:
@@ -140,7 +176,7 @@ async def _mock_vision_loop(*, state: TelemetryState, interval_s: float) -> None
     while True:
         await asyncio.sleep(interval_s)
         vr: VisionResult = await analyze_frame_with_gpt54(frame_b64_jpeg="", mock_ai=True, seed=i)
-        state.latest_vision = {"hazards": vr.hazards, "vitals": vr.vitals, "ai_dispatcher_alert": vr.ai_dispatcher_alert}
+        state.latest_vision = _vision_to_state_dict(vr)
         await publish_telemetry(state)
         i += 1
 
@@ -151,6 +187,7 @@ async def _mock_transcript_loop(*, state: TelemetryState) -> None:
         buffer_parts.append(chunk.text)
         buffer_parts = buffer_parts[-20:]
         state.transcript_buffer = " ".join(buffer_parts)
+        record_transcript_side_effects(state, text=chunk.text, is_final=chunk.is_final)
         await publish_transcript_event(
             {"timestamp": chunk.timestamp, "text": chunk.text, "is_final": chunk.is_final, "confidence": chunk.confidence}
         )
@@ -197,7 +234,7 @@ async def _vision_loop_from_livekit_track(
         frame_b64 = base64.b64encode(jpeg_bytes).decode("ascii")
 
         vr: VisionResult = await analyze_frame_with_gpt54(frame_b64_jpeg=frame_b64, model=openai_model)
-        state.latest_vision = {"hazards": vr.hazards, "vitals": vr.vitals, "ai_dispatcher_alert": vr.ai_dispatcher_alert}
+        state.latest_vision = _vision_to_state_dict(vr)
         await publish_telemetry(state)
 
 
@@ -232,6 +269,8 @@ async def _transcript_loop_from_livekit_track(*, state: TelemetryState, audio_tr
             buffer_parts.append(tchunk.text)
             buffer_parts = buffer_parts[-40:]
             state.transcript_buffer = " ".join(buffer_parts)
+
+        record_transcript_side_effects(state, text=tchunk.text, is_final=tchunk.is_final)
 
         await publish_transcript_event(
             {
