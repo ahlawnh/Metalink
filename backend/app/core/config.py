@@ -17,10 +17,21 @@ def load_env() -> None:
     """
     Load environment variables from common backend-local locations.
     Call this once at process startup.
+
+    Order: `.env` first, then `.env.local` (local wins).
+
+    `.env` uses ``override=True`` so file entries beat stale shell exports during
+    local dev (e.g. ``export MOCK_AI=false`` left over from a Deepgram test while
+    `.env` says ``MOCK_AI=true``).
+
+    When ``AEGIS_TESTING=1`` (set by ``tests/conftest.py``), skip dotenv so a developer's
+    `.env` does not break pytest expectations.
     """
+    if os.getenv("AEGIS_TESTING") == "1":
+        return
     backend_root = _repo_root()
-    load_dotenv(backend_root / ".env.local", override=False)
-    load_dotenv(backend_root / ".env", override=False)
+    load_dotenv(backend_root / ".env", override=True)
+    load_dotenv(backend_root / ".env.local", override=True)
 
 
 class Settings(BaseModel):
