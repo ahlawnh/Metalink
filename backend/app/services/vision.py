@@ -89,7 +89,7 @@ async def analyze_frame_with_gpt54(
     depend on Hacker 4 schemas; Hacker 4 can validate at the broadcaster boundary.
     """
 
-    if mock_ai or os.getenv("MOCK_AI", "").lower() in {"1", "true", "yes"}:
+    if mock_ai or os.getenv("MOCK_AI", "true").lower() in {"1", "true", "yes", "on"}:
         return _mock_vision(seed=seed)
 
     # Optional dependency: do not hard-require OpenAI SDK during early mock phase.

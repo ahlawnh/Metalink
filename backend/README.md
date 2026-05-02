@@ -2,6 +2,15 @@
 
 Python **FastAPI** service: LiveKit ingestion, vision + transcription (Hacker 2), WebSocket telemetry (Hacker 4).
 
+## What this backend does (big picture)
+
+1. **Ingestion (Hacker 2)** — A hidden backend participant can join a **LiveKit** room, read the bystander’s **video** and **audio**, sample frames every ~2.5s, and run **OpenAI** vision + **Deepgram** transcription (`app/services/`).
+2. **Merge** — `telemetry_aggregate.py` combines the latest vision output + rolling transcript (e.g. “breathe” cadence, keyword hints).
+3. **Plumbing (Hacker 4)** — `broadcast.py` turns that into **Pydantic** `TelemetryUpdate` objects and pushes **v2 WebSocket events** to the dispatcher dashboard (`/api/ws/telemetry`).
+4. **Mock mode** — With `MOCK_AI=true`, no cloud AI runs; fake loops still drive the same WebSocket shape so the frontend can build the UI cheaply.
+
+**This README** covers running the **API server**. The **mic test** below only checks **Deepgram + your laptop mic**, not the full server.
+
 ## Prerequisites
 
 - Python **3.11+** recommended
@@ -82,6 +91,24 @@ websocat ws://127.0.0.1:8000/api/ws/telemetry
 ```
 
 Full frontend contract: `docs/TELEMETRY_API.md`. Sample payloads: `fixtures/websocket_event_samples.json`.
+
+## Stage 3: Mic → Deepgram stress test (local, no server)
+
+Proves **Deepgram** hears you and a tiny **stress heuristic** fires on panic phrases. Uses the same `deepgram_stream_from_pcm16` helper as the LiveKit audio path.
+
+**Requirements:** `DEEPGRAM_API_KEY` in `.env`, **`MOCK_AI=false`** (otherwise the transcription module uses mock text and never calls Deepgram). Uses **deepgram-sdk v6** (`listen.v1` WebSocket API). Optional: `pip install sounddevice numpy` (listed in `requirements.txt`).
+
+```bash
+cd backend
+source .venv/bin/activate
+pip install -r requirements.txt
+export MOCK_AI=false
+python -m scripts.mic_deepgram_stress_test
+```
+
+You should see `[interim]` / `[FINAL]` lines, a growing `[buffer]`, and **`STRESS_LEVEL: CRITICAL`** after phrases like *“he’s not breathing”* or *“oh my god … help me”* (see `scripts/mic_deepgram_stress_test.py` for exact triggers). **Ctrl+C** to stop.
+
+Deepgram usage may bill your project; this is not guaranteed “$0” unless your account has free credit.
 
 ## Tests
 
