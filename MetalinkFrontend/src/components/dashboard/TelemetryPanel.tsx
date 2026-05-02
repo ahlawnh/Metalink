@@ -12,24 +12,29 @@ export default function TelemetryPanel({ telemetry }: TelemetryPanelProps) {
   return (
     <section
       className={cn(
-        // Keep border width constant to prevent layout shift during alert transitions.
-        'rounded-xl border-2 border-transparent bg-zinc-900 p-5 shadow-md shadow-black/25 transition-colors duration-300',
-        isCritical && 'border-red-500 bg-red-950/25 animate-pulse',
+        'dash-card p-5 transition-colors duration-300',
+        isCritical &&
+          'ring-2 ring-[var(--dash-critical)] shadow-[0_4px_28px_rgba(239,83,80,0.22)] animate-pulse',
       )}
       aria-label="Respiratory telemetry"
     >
-      <p className="text-xs uppercase tracking-widest text-zinc-400">Estimated Respiratory Rate</p>
+      <p className="dash-label">Estimated respiratory rate</p>
 
       <div className="mt-3 flex items-end gap-3">
-        <span className="text-6xl font-bold leading-none text-zinc-50">
+        <span
+          className={cn(
+            'font-data text-6xl font-extrabold tabular-nums leading-none tracking-tight text-[var(--dash-accent)]',
+            isCritical && 'text-[var(--dash-critical)]',
+          )}
+        >
           {telemetry.estimated_respiratory_rate}
         </span>
-        <span className="pb-1 text-xs uppercase tracking-widest text-zinc-400">breaths/min</span>
+        <span className="dash-label pb-1">breaths/min</span>
       </div>
 
-      <div className="mt-6 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2">
-        <p className="text-xs uppercase tracking-widest text-zinc-400">Respiratory Status</p>
-        <p className={cn('mt-1 text-lg font-semibold text-zinc-100', isCritical && 'text-red-300')}>
+      <div className="dash-inset mt-6 px-3 py-2">
+        <p className="dash-label">Respiratory status</p>
+        <p className={cn('mt-1 text-lg font-bold text-[var(--dash-text-primary)]', isCritical && 'text-[var(--dash-critical)]')}>
           {telemetry.respiratory_status}
         </p>
       </div>
