@@ -69,12 +69,12 @@ export default function VideoPlayer({ src = MOCK_VIDEO_URL, latencyMs = 42 }: Vi
     }
   }, [])
 
+  const ctrlBtn =
+    'rounded-md bg-[var(--dash-surface-raised)] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--dash-text-primary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ring-white/[0.08] hover:bg-[color-mix(in_srgb,var(--dash-surface-raised)_92%,#fff)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dash-accent)]'
+
   return (
-    <section className="w-full rounded-xl border border-zinc-700 bg-zinc-900 p-3 shadow-md shadow-black/25">
-      <div
-        ref={shellRef}
-        className="relative aspect-video w-full overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950"
-      >
+    <section className="dash-card w-full p-3">
+      <div ref={shellRef} className="dash-inset relative aspect-video w-full overflow-hidden bg-[var(--dash-bg)]">
         <video
           ref={videoRef}
           className="h-full w-full object-cover"
@@ -89,33 +89,23 @@ export default function VideoPlayer({ src = MOCK_VIDEO_URL, latencyMs = 42 }: Vi
         />
 
         {/* Native controls sit under overlays; explicit bar keeps targets reliable for dispatch UX. */}
-        <div className="absolute bottom-0 left-0 right-0 z-20 flex flex-wrap items-center gap-2 bg-zinc-950/92 px-3 py-2">
-          <button
-            type="button"
-            onClick={togglePlay}
-            className="rounded-md border border-zinc-600 bg-zinc-800 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-100 hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
-          >
+        <div className="absolute bottom-0 left-0 right-0 z-20 flex flex-wrap items-center gap-2 bg-[color-mix(in_srgb,var(--dash-bg)_92%,transparent)] px-3 py-2 backdrop-blur-sm">
+          <button type="button" onClick={togglePlay} className={ctrlBtn}>
             {isPlaying ? 'Pause' : 'Play'}
           </button>
-          <button
-            type="button"
-            onClick={toggleMute}
-            className="rounded-md border border-zinc-600 bg-zinc-800 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-100 hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
-          >
+          <button type="button" onClick={toggleMute} className={ctrlBtn}>
             {isMuted ? 'Unmute' : 'Mute'}
           </button>
-          <button
-            type="button"
-            onClick={toggleFullscreen}
-            className="rounded-md border border-zinc-600 bg-zinc-800 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-100 hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
-          >
+          <button type="button" onClick={toggleFullscreen} className={ctrlBtn}>
             Fullscreen
           </button>
-          <span className="ml-auto text-xs font-medium tabular-nums text-zinc-400">Latency {latencyMs}ms</span>
+          <span className="ml-auto font-data text-[11px] font-semibold tabular-nums text-[var(--dash-text-primary)]">
+            Latency <span className="text-[var(--dash-accent)]">{latencyMs}</span> ms
+          </span>
         </div>
 
         <div className="pointer-events-none absolute right-3 top-3 z-10">
-          <span className="inline-flex items-center gap-2 rounded-full border border-red-500/70 bg-red-950/80 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-red-100">
+          <span className="inline-flex items-center gap-2 rounded-full border border-red-500/85 bg-red-950/88 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-red-100 ring-1 ring-red-400/35">
             <span className="size-2 animate-pulse rounded-full bg-red-400" />
             Live POV
           </span>
