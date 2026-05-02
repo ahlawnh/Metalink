@@ -1,9 +1,10 @@
-<<<<<<< HEAD
-
-# Local env files
+# Local env files (never commit secrets)
+.env
 .env.local
 .env.*.local
-=======
+.env.*
+!.env.example
+
 # Xcode
 #
 # gitignore contributors: remember to update Global/Xcode.gitignore, Objective-C.gitignore & Swift.gitignore
@@ -25,7 +26,7 @@ playground.xcworkspace
 
 # Swift Package Manager
 #
-# Add this line if you want to avoid checking in source code from Swift Package Manager dependencies.
+# Add this line if you want to avoid checking source code from Swift Package Manager dependencies.
 # Packages/
 # Package.pins
 # Package.resolved
@@ -39,25 +40,25 @@ playground.xcworkspace
 
 # CocoaPods
 #
-# We recommend against adding the Pods directory to your .gitignore. However
+# We recommend against adding the Pods directory to your gitignore. However
 # you should judge for yourself, the pros and cons are mentioned at:
 # https://guides.cocoapods.org/using/using-cocoapods.html#should-i-check-the-pods-directory-into-source-control
 #
 # Pods/
 #
-# Add this line if you want to avoid checking in source code from the Xcode workspace
+# Add this line if you want to avoid checking source code from the CocoaPods workspace
 # *.xcworkspace
 
 # Carthage
 #
-# Add this line if you want to avoid checking in source code from Carthage dependencies.
+# Add this line if you want to avoid checking source code from Carthage dependencies.
 # Carthage/Checkouts
 
 Carthage/Build/
 
 # fastlane
 #
-# It is recommended to not store the screenshots in the git repo.
+# It is recommended not to store the screenshots in the git repo.
 # Instead, use fastlane to re-generate the screenshots whenever they are needed.
 # For more information about the recommended setup visit:
 # https://docs.fastlane.tools/best-practices/source-control/#source-control
@@ -66,4 +67,3 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
->>>>>>> cbe119b8d8fac27eb9dbfc8e83085df0cefc3785
