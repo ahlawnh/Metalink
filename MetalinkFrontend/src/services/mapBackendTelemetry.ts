@@ -120,9 +120,22 @@ export function applyTelemetryUpdate(
   const snippetChunks = snippetToTranscript(fullPayload.transcript_snippet, now)
   const transcript = snippetChunks.length > 0 ? snippetChunks : previous.transcript
 
+  const loc = payload.caller_location
+  const caller_location =
+    loc && typeof loc.latitude === 'number' && typeof loc.longitude === 'number'
+      ? {
+          label: typeof loc.label === 'string' && loc.label.length > 0 ? loc.label : previous.caller_location.label,
+          latitude: loc.latitude,
+          longitude: loc.longitude,
+          accuracy_m: typeof loc.accuracy_m === 'number' ? loc.accuracy_m : previous.caller_location.accuracy_m,
+          updated_at: typeof loc.updated_at === 'string' ? loc.updated_at : now,
+        }
+      : previous.caller_location
+
   return {
     ...previous,
     updatedAt: now,
+    caller_location,
     respiratory: {
       estimated_respiratory_rate: typeof rate === 'number' && !Number.isNaN(rate) ? rate : 0,
       respiratory_status: respiratoryStatus,

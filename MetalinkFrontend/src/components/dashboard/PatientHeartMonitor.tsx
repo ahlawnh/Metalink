@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useSmoothedBpm } from '@/hooks/useSmoothedBpm'
 import { cn } from '@/lib/utils'
 import type { PatientCardiacMode, PatientHeartTelemetry } from '@/types/dashboard'
 
@@ -7,24 +8,21 @@ interface PatientHeartMonitorProps {
 }
 
 interface ModePresentation {
-  label: string
   bpmClass: string
   strokeClass: string
   ribbonClass: string
   outerAccentClass: string
   sparkPulse: boolean
-  liveLevel: 'off' | 'polite' | 'assertive'
 }
 
 /** BPM + sparkline: #00FF88 good · #FFEA00 / #FF9100 / #FF5722 needs-work ladder · #FF1744 critical (literals for Tailwind). */
 
 function presentationFor(mode: PatientCardiacMode): ModePresentation {
   const ribbonBase =
-    'rounded-lg px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ring-white/[0.06]'
+    'rounded-md px-2 py-1 text-[10px] font-extrabold uppercase tracking-[0.14em] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ring-white/[0.06]'
   switch (mode) {
     case 'stable':
       return {
-        label: 'Stable rhythm',
         bpmClass: 'text-[#00FF88]',
         strokeClass: 'stroke-[#00FF88]',
         ribbonClass: cn(
@@ -33,11 +31,9 @@ function presentationFor(mode: PatientCardiacMode): ModePresentation {
         ),
         outerAccentClass: '',
         sparkPulse: false,
-        liveLevel: 'polite',
       }
     case 'elevated_stress':
       return {
-        label: 'Elevated stress / HR ↑',
         bpmClass: 'text-[#FFEA00]',
         strokeClass: 'stroke-[#FFEA00]',
         ribbonClass: cn(
@@ -46,11 +42,9 @@ function presentationFor(mode: PatientCardiacMode): ModePresentation {
         ),
         outerAccentClass: '',
         sparkPulse: false,
-        liveLevel: 'polite',
       }
     case 'hypoperfusion_watch':
       return {
-        label: 'Low output watch (bradycardia-proxy)',
         bpmClass: 'text-[#FF9100]',
         strokeClass: 'stroke-[#FF9100]',
         ribbonClass: cn(
@@ -59,11 +53,9 @@ function presentationFor(mode: PatientCardiacMode): ModePresentation {
         ),
         outerAccentClass: '',
         sparkPulse: false,
-        liveLevel: 'polite',
       }
     case 'compensatory_tachycardia':
       return {
-        label: 'Compensatory tachycardia',
         bpmClass: 'text-[#FF5722]',
         strokeClass: 'stroke-[#FF5722]',
         ribbonClass: cn(
@@ -72,11 +64,9 @@ function presentationFor(mode: PatientCardiacMode): ModePresentation {
         ),
         outerAccentClass: 'ring-2 ring-[#FF5722]/75',
         sparkPulse: false,
-        liveLevel: 'assertive',
       }
     case 'critical_intervention':
       return {
-        label: 'CRITICAL · prepare CPR / AED per protocol',
         bpmClass: 'text-[#FF1744]',
         strokeClass: 'stroke-[#FF1744]',
         ribbonClass: cn(
@@ -85,7 +75,6 @@ function presentationFor(mode: PatientCardiacMode): ModePresentation {
         ),
         outerAccentClass: 'animate-pulse ring-2 ring-[#FF1744]',
         sparkPulse: true,
-        liveLevel: 'assertive',
       }
     default:
       return presentationFor('stable')
@@ -116,47 +105,43 @@ function buildSparkPath(samples: number[], width: number, height: number): strin
 export default function PatientHeartMonitor({ patient }: PatientHeartMonitorProps) {
   const theme = presentationFor(patient.mode)
   const samples = clampHistory(patient.history_bpm, 32)
-  const path = useMemo(() => buildSparkPath(samples, 220, 48), [samples])
+  const path = useMemo(() => buildSparkPath(samples, 220, 44), [samples])
+
+  const displayedBpm = useSmoothedBpm(patient.heart_rate_bpm, 0)
+
+  const warningLine = patient.mode.replace(/_/g, ' ').toUpperCase()
+  const liveLevel = patient.mode === 'critical_intervention' ? 'assertive' : 'polite'
 
   return (
     <section
       className={cn(
-        'dash-card relative shrink-0 overflow-hidden p-4 transition-[box-shadow] duration-300',
+        'dash-card relative shrink-0 overflow-hidden p-3 transition-[box-shadow] duration-300',
         theme.outerAccentClass,
       )}
-      aria-label={`Injured person heart estimate ${patient.heart_rate_bpm} BPM, mode ${patient.mode}`}
+      aria-label={`Injured person heart estimate ${displayedBpm} BPM, mode ${patient.mode}`}
     >
       <div
-        className={cn('mb-3', theme.ribbonClass)}
-        {...(theme.liveLevel !== 'off'
-          ? { role: 'status', 'aria-live': theme.liveLevel as 'polite' | 'assertive' }
-          : {})}
+        className={cn('mb-2', theme.ribbonClass)}
+        role="status"
+        aria-live={liveLevel as 'polite' | 'assertive'}
       >
-        {patient.mode.split('_').join(' ')} · {theme.label}
+        {warningLine}
       </div>
 
-      <p className="dash-label">
-        Injured person (RPPG / mock) · {patient.signal_source === 'mock' ? 'training feed' : 'live estimate'}
-      </p>
-      <p className="mt-1 text-sm font-medium text-[var(--dash-text-primary)]">{patient.dispatcher_notice}</p>
-
-      <div className="mt-3 flex flex-wrap items-end gap-4">
-        <div>
-          <p
-            className={cn(
-              'font-data text-6xl font-extrabold tabular-nums leading-none tracking-tight transition-colors',
-              theme.bpmClass,
-            )}
-          >
-            {patient.heart_rate_bpm}
-          </p>
-          <p className="dash-label mt-2">BPM (est.)</p>
-        </div>
-        <div className="dash-inset relative min-h-[3rem] min-w-[140px] flex-1 pt-2" aria-hidden>
+      <div className="flex flex-wrap items-end gap-3">
+        <p
+          className={cn(
+            'font-data text-5xl font-extrabold tabular-nums leading-none tracking-tight transition-colors',
+            theme.bpmClass,
+          )}
+        >
+          {displayedBpm}
+        </p>
+        <div className="dash-inset min-h-[2.35rem] min-w-[120px] flex-1 pt-1.5" aria-hidden>
           {path ? (
-            <svg className="h-12 w-full" viewBox="0 0 220 48" preserveAspectRatio="none">
+            <svg className="h-10 w-full" viewBox="0 0 220 44" preserveAspectRatio="none">
               <path
-                d="M0 24 H220"
+                d="M0 22 H220"
                 className="stroke-[var(--dash-text-secondary)] opacity-35"
                 fill="none"
                 strokeWidth="0.75"
@@ -169,11 +154,7 @@ export default function PatientHeartMonitor({ patient }: PatientHeartMonitorProp
                 vectorEffect="non-scaling-stroke"
               />
             </svg>
-          ) : (
-            <div className="flex h-full items-center justify-center text-[11px] text-[var(--dash-text-secondary)]">
-              Insufficient samples
-            </div>
-          )}
+          ) : null}
         </div>
       </div>
     </section>

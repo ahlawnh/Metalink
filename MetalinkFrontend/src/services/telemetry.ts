@@ -1,4 +1,10 @@
-import type { DashboardTelemetryPayload, PatientCardiacMode, PatientHeartTelemetry } from '@/types/dashboard'
+import type {
+  DashboardTelemetryPayload,
+  PatientCardiacMode,
+  PatientHeartTelemetry,
+  TranscriptAISummaryTelemetry,
+  TranscriptAISummaryStatus,
+} from '@/types/dashboard'
 
 function asIsoString(value: unknown, fallback: string): string {
   return typeof value === 'string' ? value : fallback
@@ -40,6 +46,26 @@ function normalizePatientHeart(data: Partial<DashboardTelemetryPayload>): Patien
   }
 }
 
+function normalizeTranscriptAISummary(data: Partial<DashboardTelemetryPayload>): TranscriptAISummaryTelemetry {
+  const raw = data.transcript_ai_summary
+  const allowed: TranscriptAISummaryStatus[] = ['idle', 'loading', 'ready', 'error']
+  let status: TranscriptAISummaryStatus =
+    typeof raw?.status === 'string' && allowed.includes(raw.status as TranscriptAISummaryStatus)
+      ? (raw.status as TranscriptAISummaryStatus)
+      : 'idle'
+  const text = typeof raw?.text === 'string' ? raw.text : null
+  if (status === 'idle' && text?.trim()) {
+    status = 'ready'
+  }
+
+  return {
+    status,
+    text,
+    error_detail: typeof raw?.error_detail === 'string' ? raw.error_detail : undefined,
+    updated_at: typeof raw?.updated_at === 'string' ? raw.updated_at : undefined,
+  }
+}
+
 export function normalizeTelemetryPayload(input: unknown): DashboardTelemetryPayload {
   const now = new Date().toISOString()
   const data = (input ?? {}) as Partial<DashboardTelemetryPayload>
@@ -61,9 +87,11 @@ export function normalizeTelemetryPayload(input: unknown): DashboardTelemetryPay
     },
     hazards: Array.isArray(data.hazards) ? data.hazards : [],
     transcript: Array.isArray(data.transcript) ? data.transcript : [],
+    transcript_ai_summary: normalizeTranscriptAISummary(data),
     video: {
       posterUrl: data.video?.posterUrl ?? null,
       streamStatus: data.video?.streamStatus ?? 'disconnected',
+      streamUrl: typeof data.video?.streamUrl === 'string' ? data.video.streamUrl || null : null,
     },
     operator: {
       heart_rate_bpm: Number(data.operator?.heart_rate_bpm ?? 72),

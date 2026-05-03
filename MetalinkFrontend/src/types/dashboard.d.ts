@@ -35,6 +35,18 @@ export interface TranscriptChunk {
 export interface VideoTelemetry {
   posterUrl: string | null
   streamStatus: 'connected' | 'connecting' | 'disconnected'
+  /** HLS/MP4/WebRTC playback URL when pipeline provides a stream; fallback uses mock/demo clip. */
+  streamUrl?: string | null
+}
+
+/** LLM recap over dual-channel STT — populated by ingest service. */
+export type TranscriptAISummaryStatus = 'idle' | 'loading' | 'ready' | 'error'
+
+export interface TranscriptAISummaryTelemetry {
+  status: TranscriptAISummaryStatus
+  text: string | null
+  error_detail?: string
+  updated_at?: string
 }
 
 /** Vitals for the 911 operator workstation (mock until wearables integrate). */
@@ -78,6 +90,7 @@ export interface DashboardTelemetryPayload {
   respiratory: RespiratoryTelemetry
   hazards: HazardTelemetry[]
   transcript: TranscriptChunk[]
+  transcript_ai_summary: TranscriptAISummaryTelemetry
   video: VideoTelemetry
   operator: OperatorTelemetry
   caller_location: CallerLocationTelemetry

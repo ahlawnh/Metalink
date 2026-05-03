@@ -45,9 +45,15 @@
       "timestamp": "2026-05-02T11:59:42.000Z"
     }
   ],
+  "transcript_ai_summary": {
+    "status": "ready",
+    "text": "Caller reports respiratory distress with rapid breathing and coughing amid heavy smoke visibility. Dispatcher directs evacuation from smoke and stabilization of camera — overdose suspected context with environmental hazards noted elsewhere on scene.",
+    "updated_at": "2026-05-02T11:59:55.000Z"
+  },
   "video": {
-    "posterUrl": "/assets/hero.png",
-    "streamStatus": "connecting"
+    "posterUrl": null,
+    "streamStatus": "connected",
+    "streamUrl": "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4"
   },
   "operator": {
     "heart_rate_bpm": 78

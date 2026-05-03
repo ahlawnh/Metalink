@@ -109,6 +109,16 @@ class HapticCue(BaseModel):
     bpm: Optional[int] = Field(default=None, ge=60, le=140)
 
 
+class CallerLocationSnapshot(BaseModel):
+    """Fused GPS row pushed on telemetry updates or when the client sends `request.caller_location`."""
+
+    label: str = "Location unavailable"
+    latitude: float
+    longitude: float
+    accuracy_m: Optional[float] = Field(default=None, ge=0)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
 class TelemetryUpdate(BaseModel):
     timestamp: datetime = Field(default_factory=utc_now)
     scene_hazards: list[DetectedItem] = Field(default_factory=list)
@@ -126,6 +136,7 @@ class TelemetryUpdate(BaseModel):
     heart_rate_rppg: Optional[HeartRateRppgEstimate] = None
     agonal_breathing: Optional[AgonalBreathingSignal] = None
     haptic_cue: Optional[HapticCue] = None
+    caller_location: Optional[CallerLocationSnapshot] = None
 
 
 class PipelineStatusUpdate(BaseModel):

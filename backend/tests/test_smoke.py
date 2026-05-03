@@ -38,6 +38,12 @@ def test_telemetry_scenarios(client: TestClient) -> None:
     assert "overdose_case" in scenarios
 
 
+def test_livekit_token_returns_503_when_unconfigured(client: TestClient) -> None:
+    response = client.get("/api/livekit/token")
+    assert response.status_code == 503
+    assert "not configured" in response.json()["detail"].lower()
+
+
 def test_websocket_envelope_and_schema_version(client: TestClient) -> None:
     with client.websocket_connect("/api/ws/telemetry?scenario=normal_case") as ws:
         first = ws.receive_json()

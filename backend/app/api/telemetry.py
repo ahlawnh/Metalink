@@ -10,6 +10,7 @@ from app.core.constants import SUPPORTED_MOCK_SCENARIOS
 from app.core.mock_telemetry import build_mock_telemetry, normalize_scenario
 from app.core.websocket_manager import telemetry_manager
 from app.schemas.telemetry import (
+    CallerLocationSnapshot,
     EventType,
     Heartbeat,
     PipelineStatus,
@@ -89,6 +90,7 @@ async def telemetry_websocket(websocket: WebSocket, scenario: Optional[str] = No
     )
 
     pending_summary_tasks: set[asyncio.Task[None]] = set()
+    location_refresh_seq = 0
 
     def _discard_summary_task(task: asyncio.Task[None]) -> None:
         pending_summary_tasks.discard(task)
@@ -142,6 +144,24 @@ async def telemetry_websocket(websocket: WebSocket, scenario: Optional[str] = No
                 task = asyncio.create_task(run_requested_summary())
                 pending_summary_tasks.add(task)
                 task.add_done_callback(_discard_summary_task)
+            elif isinstance(data, dict) and data.get("event_type") == "request.caller_location":
+                location_refresh_seq += 1
+                jitter = (location_refresh_seq % 120) * 0.000012
+                base = build_mock_telemetry(active_scenario, location_refresh_seq)
+                loc = CallerLocationSnapshot(
+                    label="Near City Hall · San Francisco (mock fused GPS)",
+                    latitude=37.779379 + jitter,
+                    longitude=-122.418853 - jitter * 0.65,
+                    accuracy_m=float(10 + (location_refresh_seq % 12)),
+                )
+                refreshed = base.model_copy(update={"caller_location": loc})
+                await telemetry_manager.send_event(
+                    websocket,
+                    WebSocketEvent(
+                        event_type=EventType.TELEMETRY_UPDATE,
+                        payload=refreshed,
+                    ),
+                )
     except WebSocketDisconnect:
         pass
     except Exception as exc:
