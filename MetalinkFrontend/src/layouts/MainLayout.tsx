@@ -1,4 +1,5 @@
 import CallerLocationMapPanel from '@/components/dashboard/CallerLocationMapPanel'
+import CprMetronomeDispatchPanel from '@/components/dashboard/CprMetronomeDispatchPanel'
 import VitalsTelemetryCards from '@/components/dashboard/VitalsTelemetryCards'
 import TranscriptSummary from '@/components/dashboard/TranscriptSummary'
 import VideoPlayer from '@/components/dashboard/VideoPlayer'
@@ -6,8 +7,15 @@ import { useTelemetryStream } from '@/hooks/useTelemetryStream'
 import { cn } from '@/lib/utils'
 
 export function MainLayout() {
-  const { telemetry, connectionState, wsLatencyMs, requestRollingSummary, subscribeRollingSummary } =
-    useTelemetryStream()
+  const {
+    telemetry,
+    connectionState,
+    wsLatencyMs,
+    requestRollingSummary,
+    subscribeRollingSummary,
+    sendDispatchCpr,
+    sendStopDispatchCpr,
+  } = useTelemetryStream()
 
   const connectionTone =
     connectionState === 'connected'
@@ -70,6 +78,12 @@ export function MainLayout() {
           patient={telemetry.patient_heart}
           respiratory={telemetry.respiratory}
           telemetryCueRevision={Math.floor(Date.parse(telemetry.updatedAt) / 1000) || 0}
+        />
+        <CprMetronomeDispatchPanel
+          connectionState={connectionState}
+          hapticCue={telemetry.haptic_cue}
+          sendDispatchCpr={sendDispatchCpr}
+          sendStopDispatchCpr={sendStopDispatchCpr}
         />
         <TranscriptSummary
           chunks={telemetry.transcript}

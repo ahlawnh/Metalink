@@ -19,7 +19,9 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useIncidentTelemetryReporter } from "@/hooks/useIncidentTelemetryReporter";
+import { useIncidentCprHapticListener } from "@/hooks/useIncidentCprHapticListener";
 import { useRppgVitals } from "@/hooks/useRppgVitals";
+import { CprDispatcherGuidance } from "@/components/incident_feed/CprDispatcherGuidance";
 import { VitalsTutorialModal } from "@/components/incident_feed/VitalsTutorialModal";
 import type { IncidentLocationSnapshot } from "@/lib/incidentTelemetry";
 import { positionToSnapshot } from "@/lib/incidentTelemetry";
@@ -127,6 +129,8 @@ function EmergencyCallSurface({
     active: true,
     paused: tutorialOpen,
   });
+
+  const cprHapticCue = useIncidentCprHapticListener(Boolean(sessionId));
 
   useIncidentTelemetryReporter({
     enabled: Boolean(sessionId),
@@ -280,6 +284,8 @@ function EmergencyCallSurface({
         open={tutorialOpen}
         onClose={() => setTutorialOpen(false)}
       />
+
+      <CprDispatcherGuidance cue={cprHapticCue} />
     </div>
   );
 }
