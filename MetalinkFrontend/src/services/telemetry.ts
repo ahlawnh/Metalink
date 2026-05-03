@@ -2,6 +2,7 @@ import type {
   DashboardTelemetryPayload,
   PatientCardiacMode,
   PatientHeartTelemetry,
+  RespiratoryTelemetry,
   TranscriptAISummaryTelemetry,
   TranscriptAISummaryStatus,
 } from '@/types/dashboard'
@@ -17,6 +18,27 @@ const PATIENT_CARDIAC_MODES: PatientCardiacMode[] = [
   'compensatory_tachycardia',
   'critical_intervention',
 ]
+
+function normalizeRespiratory(data: Partial<DashboardTelemetryPayload>): RespiratoryTelemetry {
+  const raw = data.respiratory
+  const rr = Number(raw?.estimated_respiratory_rate ?? 0)
+  const hist = Array.isArray(raw?.history_rr)
+    ? raw.history_rr.map(Number).filter((n) => Number.isFinite(n))
+    : []
+  const historySafe = hist.length > 0 ? hist : Number.isFinite(rr) && rr > 0 ? [rr] : []
+
+  const src = raw?.source
+  const source: RespiratoryTelemetry['source'] =
+    src === 'ai' || src === 'mock' || src === 'rppg' ? src : 'mock'
+
+  return {
+    estimated_respiratory_rate: Number.isFinite(rr) ? rr : 0,
+    respiratory_status: raw?.respiratory_status ?? 'normal',
+    confidence: Number(raw?.confidence ?? 0),
+    source,
+    history_rr: historySafe,
+  }
+}
 
 function normalizePatientHeart(data: Partial<DashboardTelemetryPayload>): PatientHeartTelemetry {
   const raw = data.patient_heart
@@ -35,7 +57,7 @@ function normalizePatientHeart(data: Partial<DashboardTelemetryPayload>): Patien
     raw?.signal_source === 'rppg' || raw?.signal_source === 'mock' || raw?.signal_source === 'unknown'
       ? raw.signal_source
       : 'unknown'
-  const historySafe = history.length > 0 ? history : Number.isFinite(bpm) ? [bpm] : [0]
+  const historySafe = history.length > 0 ? history : Number.isFinite(bpm) && bpm > 0 ? [bpm] : []
 
   return {
     heart_rate_bpm: Number.isFinite(bpm) ? bpm : 0,
@@ -79,12 +101,7 @@ export function normalizeTelemetryPayload(input: unknown): DashboardTelemetryPay
       caller_label: data.session?.caller_label ?? 'Unknown caller',
       started_at: asIsoString(data.session?.started_at, now),
     },
-    respiratory: {
-      estimated_respiratory_rate: Number(data.respiratory?.estimated_respiratory_rate ?? 0),
-      respiratory_status: data.respiratory?.respiratory_status ?? 'watch',
-      confidence: Number(data.respiratory?.confidence ?? 0),
-      source: data.respiratory?.source ?? 'mock',
-    },
+    respiratory: normalizeRespiratory(data),
     hazards: Array.isArray(data.hazards) ? data.hazards : [],
     transcript: Array.isArray(data.transcript) ? data.transcript : [],
     transcript_ai_summary: normalizeTranscriptAISummary(data),

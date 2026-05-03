@@ -13,7 +13,10 @@ export interface RespiratoryTelemetry {
   estimated_respiratory_rate: number
   respiratory_status: RespiratoryStatus
   confidence: number
-  source: 'mock' | 'ai'
+  /** `rppg` = incident_feed / camera-linked estimates merged on the dashboard. */
+  source: 'mock' | 'ai' | 'rppg'
+  /** Recent BrPM samples (newest last), same role as `patient_heart.history_bpm`. */
+  history_rr: number[]
 }
 
 export interface HazardTelemetry {

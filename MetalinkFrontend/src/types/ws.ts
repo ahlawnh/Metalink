@@ -6,6 +6,7 @@ export type BackendEventType =
   | 'alert.critical'
   | 'pipeline.status'
   | 'heartbeat'
+  | 'client.pong'
 
 export interface WsEnvelope {
   schema_version: string
@@ -42,6 +43,13 @@ export interface BackendCallerLocationSnapshot {
   updated_at?: string
 }
 
+/** Camera-derived HR from incident_feed (backend `TelemetryUpdate.heart_rate_rppg`). */
+export interface BackendHeartRateRppg {
+  value: number | null
+  confidence: number
+  disclaimer?: string
+}
+
 export interface BackendTranscriptSegment {
   speaker: 'caller' | 'dispatcher'
   text: string
@@ -64,6 +72,10 @@ export interface BackendTelemetryUpdatePayload {
   critical_alerts: BackendCriticalAlert[]
   /** When present, replaces dashboard caller map pin (e.g. after `request.caller_location`). */
   caller_location?: BackendCallerLocationSnapshot
+  /** When present, updates patient cardiac strip from incident_feed rPPG. */
+  heart_rate_rppg?: BackendHeartRateRppg | null
+  /** When true, dispatcher clears call transcript and AI summary (bystander ended session). */
+  clear_transcript?: boolean
 }
 
 export interface BackendHeartbeatPayload {

@@ -107,7 +107,9 @@ export default function PatientHeartMonitor({ patient }: PatientHeartMonitorProp
   const samples = clampHistory(patient.history_bpm, 32)
   const path = useMemo(() => buildSparkPath(samples, 220, 44), [samples])
 
-  const displayedBpm = useSmoothedBpm(patient.heart_rate_bpm, 0)
+  const awaitingLiveHr = patient.signal_source === 'unknown' && patient.heart_rate_bpm <= 0
+  const hookTarget = awaitingLiveHr ? 72 : patient.heart_rate_bpm
+  const displayedBpm = useSmoothedBpm(hookTarget, 0)
 
   const warningLine = patient.mode.replace(/_/g, ' ').toUpperCase()
   const liveLevel = patient.mode === 'critical_intervention' ? 'assertive' : 'polite'
@@ -118,7 +120,11 @@ export default function PatientHeartMonitor({ patient }: PatientHeartMonitorProp
         'dash-card relative shrink-0 overflow-hidden p-3 transition-[box-shadow] duration-300',
         theme.outerAccentClass,
       )}
-      aria-label={`Injured person heart estimate ${displayedBpm} BPM, mode ${patient.mode}`}
+      aria-label={
+        awaitingLiveHr
+          ? `Injured person heart rate awaiting live vitals, mode ${patient.mode}`
+          : `Injured person heart estimate ${displayedBpm} BPM, mode ${patient.mode}`
+      }
     >
       <div
         className={cn('mb-2', theme.ribbonClass)}
@@ -135,7 +141,7 @@ export default function PatientHeartMonitor({ patient }: PatientHeartMonitorProp
             theme.bpmClass,
           )}
         >
-          {displayedBpm}
+          {awaitingLiveHr ? '—' : displayedBpm}
         </p>
         <div className="dash-inset min-h-[2.35rem] min-w-[120px] flex-1 pt-1.5" aria-hidden>
           {path ? (

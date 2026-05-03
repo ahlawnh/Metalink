@@ -1,75 +1,41 @@
 {
   "schemaVersion": "0.1.0",
   "session": {
-    "id": "mock-session-911-az-07",
-    "incident_type": "suspected-overdose",
-    "caller_label": "Bystander A",
-    "started_at": "2026-05-02T11:59:20.000Z"
+    "id": "awaiting-live-session",
+    "incident_type": "unknown",
+    "caller_label": "Awaiting session",
+    "started_at": "2026-05-02T12:00:00.000Z"
   },
   "updatedAt": "2026-05-02T12:00:00.000Z",
   "respiratory": {
-    "estimated_respiratory_rate": 22,
-    "respiratory_status": "watch",
-    "confidence": 0.83,
-    "source": "mock"
+    "estimated_respiratory_rate": 0,
+    "respiratory_status": "normal",
+    "confidence": 0,
+    "source": "mock",
+    "history_rr": []
   },
-  "hazards": [
-    {
-      "id": "hz-1",
-      "type": "smoke",
-      "severity": "high",
-      "confidence": 0.92,
-      "detectedAt": "2026-05-02T11:59:52.000Z",
-      "description": "Dense smoke is visible near the ceiling."
-    },
-    {
-      "id": "hz-2",
-      "type": "downed power line",
-      "severity": "critical",
-      "confidence": 0.86,
-      "detectedAt": "2026-05-02T11:59:44.000Z",
-      "description": "Possible energized line across the roadway."
-    }
-  ],
-  "transcript": [
-    {
-      "id": "tx-1",
-      "speaker": "caller",
-      "text": "He's breathing fast and coughing, we can barely see.",
-      "timestamp": "2026-05-02T11:59:35.000Z"
-    },
-    {
-      "id": "tx-2",
-      "speaker": "dispatcher",
-      "text": "Move away from the smoke source and keep the camera steady.",
-      "timestamp": "2026-05-02T11:59:42.000Z"
-    }
-  ],
+  "hazards": [],
+  "transcript": [],
   "transcript_ai_summary": {
-    "status": "ready",
-    "text": "Caller reports respiratory distress with rapid breathing and coughing amid heavy smoke visibility. Dispatcher directs evacuation from smoke and stabilization of camera — overdose suspected context with environmental hazards noted elsewhere on scene.",
-    "updated_at": "2026-05-02T11:59:55.000Z"
+    "status": "idle",
+    "text": null
   },
   "video": {
     "posterUrl": null,
-    "streamStatus": "connected",
-    "streamUrl": "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4"
+    "streamStatus": "disconnected",
+    "streamUrl": null
   },
   "operator": {
-    "heart_rate_bpm": 78
+    "heart_rate_bpm": 72
   },
   "caller_location": {
-    "label": "Near City Hall · San Francisco (mock fused GPS)",
-    "latitude": 37.779379,
-    "longitude": -122.418853,
-    "accuracy_m": 14,
-    "updated_at": "2026-05-02T12:00:00.000Z"
+    "label": "Awaiting caller GPS (incident feed or telemetry)"
   },
   "patient_heart": {
-    "heart_rate_bpm": 128,
-    "mode": "compensatory_tachycardia",
-    "dispatcher_notice": "Sustained HR climb with jitter on RPPG trace — treat as compensated shock pattern until airway and perfusion reassessed.",
-    "signal_source": "mock",
-    "history_bpm": [76, 78, 82, 91, 99, 108, 115, 122, 126, 128, 129, 128]
+    "heart_rate_bpm": 0,
+    "mode": "stable",
+    "dispatcher_notice": "Awaiting heart rate from incident feed rPPG or live telemetry.",
+    "signal_source": "unknown",
+    "history_bpm": []
   }
 }

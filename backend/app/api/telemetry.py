@@ -10,12 +10,13 @@ from app.core.constants import SUPPORTED_MOCK_SCENARIOS
 from app.core.mock_telemetry import build_mock_telemetry, normalize_scenario
 from app.core.websocket_manager import telemetry_manager
 from app.schemas.telemetry import (
-    CallerLocationSnapshot,
+    ClientPongPayload,
     EventType,
     Heartbeat,
     PipelineStatus,
     PipelineStatusUpdate,
     RollingSummaryPayload,
+    TelemetryUpdate,
     WebSocketEvent,
 )
 
@@ -56,13 +57,18 @@ async def telemetry_websocket(websocket: WebSocket, scenario: Optional[str] = No
     pipeline_status = PipelineStatus.MOCK if settings.mock_ai else PipelineStatus.LIVE
 
     await telemetry_manager.connect(websocket)
+    connect_message = (
+        f"Connected to telemetry stream using {active_scenario}"
+        if settings.mock_ai
+        else "Connected — live mode; first vitals map when incident_feed (or other ingest) publishes"
+    )
     connected = await telemetry_manager.send_event(
         websocket,
         WebSocketEvent(
             event_type=EventType.PIPELINE_STATUS,
             payload=PipelineStatusUpdate(
                 pipeline_status=pipeline_status,
-                message=f"Connected to telemetry stream using {active_scenario}",
+                message=connect_message,
                 mock_ai=settings.mock_ai,
                 connected_clients=telemetry_manager.connected_clients,
             ),
@@ -81,16 +87,17 @@ async def telemetry_websocket(websocket: WebSocket, scenario: Optional[str] = No
             ),
         ),
     )
-    await telemetry_manager.send_event(
-        websocket,
-        WebSocketEvent(
-            event_type=EventType.TELEMETRY_UPDATE,
-            payload=build_mock_telemetry(active_scenario, sequence=0),
-        ),
-    )
+    # In live mode, do not push a mock snapshot (e.g. overdose HR ~102) — wait for real ingest.
+    if settings.mock_ai:
+        await telemetry_manager.send_event(
+            websocket,
+            WebSocketEvent(
+                event_type=EventType.TELEMETRY_UPDATE,
+                payload=build_mock_telemetry(active_scenario, sequence=0),
+            ),
+        )
 
     pending_summary_tasks: set[asyncio.Task[None]] = set()
-    location_refresh_seq = 0
 
     def _discard_summary_task(task: asyncio.Task[None]) -> None:
         pending_summary_tasks.discard(task)
@@ -140,26 +147,37 @@ async def telemetry_websocket(websocket: WebSocket, scenario: Optional[str] = No
                 print(f"Telemetry WebSocket ignored invalid client message: {exc}")
                 continue
 
-            if isinstance(data, dict) and data.get("event_type") == "request.summary":
+            if isinstance(data, dict) and data.get("event_type") == "client.ping":
+                try:
+                    client_ts = int(data.get("client_ts", 0))
+                except (TypeError, ValueError):
+                    client_ts = 0
+                await telemetry_manager.send_event(
+                    websocket,
+                    WebSocketEvent(
+                        event_type=EventType.CLIENT_PONG,
+                        payload=ClientPongPayload(client_ts=client_ts),
+                    ),
+                )
+            elif isinstance(data, dict) and data.get("event_type") == "request.summary":
                 task = asyncio.create_task(run_requested_summary())
                 pending_summary_tasks.add(task)
                 task.add_done_callback(_discard_summary_task)
             elif isinstance(data, dict) and data.get("event_type") == "request.caller_location":
-                location_refresh_seq += 1
-                jitter = (location_refresh_seq % 120) * 0.000012
-                base = build_mock_telemetry(active_scenario, location_refresh_seq)
-                loc = CallerLocationSnapshot(
-                    label="Near City Hall · San Francisco (mock fused GPS)",
-                    latitude=37.779379 + jitter,
-                    longitude=-122.418853 - jitter * 0.65,
-                    accuracy_m=float(10 + (location_refresh_seq % 12)),
-                )
-                refreshed = base.model_copy(update={"caller_location": loc})
+                # Replay latest real GPS from incident_feed buffer only — never inject demo SF coordinates.
+                from app.api.incident_telemetry import last_incident_caller_snapshot
+
+                snap = last_incident_caller_snapshot()
+                if snap is None:
+                    continue
                 await telemetry_manager.send_event(
                     websocket,
                     WebSocketEvent(
                         event_type=EventType.TELEMETRY_UPDATE,
-                        payload=refreshed,
+                        payload=TelemetryUpdate(
+                            pipeline_status=PipelineStatus.LIVE,
+                            caller_location=snap,
+                        ),
                     ),
                 )
     except WebSocketDisconnect:

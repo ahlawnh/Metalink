@@ -6,6 +6,11 @@ import {
   applyPipelineStatus,
   applyTelemetryUpdate,
 } from '@/services/mapBackendTelemetry'
+import {
+  type IncidentTelemetryRecentRow,
+  buildIncidentRecentPollUrl,
+  mergeIncidentIntoTelemetry,
+} from '@/services/mergeIncidentTelemetry'
 import { normalizeTelemetryPayload } from '@/services/telemetry'
 import type { DashboardTelemetryPayload } from '@/types/dashboard'
 import type { WsEnvelope } from '@/types/ws'
@@ -44,6 +49,8 @@ function isEnvelope(value: unknown): value is WsEnvelope {
 export function useTelemetryStream(): {
   telemetry: DashboardTelemetryPayload
   connectionState: TelemetryConnectionState
+  /** Round-trip delay to telemetry WebSocket server via `client.ping` / `client.pong` (ms). */
+  wsLatencyMs: number | null
   /** Sends `{ event_type: "request.summary" }` — backend replies with `telemetry.summary_updated` (see TELEMETRY_API.md). */
   requestRollingSummary: () => void
   /** Subscribe to GPT rolling summaries pushed after `requestRollingSummary`. Returns unsubscribe. */
@@ -54,10 +61,13 @@ export function useTelemetryStream(): {
   const initial = useMemo(() => normalizeTelemetryPayload(fallbackTelemetry), [])
   const [telemetry, setTelemetry] = useState<DashboardTelemetryPayload>(initial)
   const [connectionState, setConnectionState] = useState<TelemetryConnectionState>('connecting')
+  const [wsLatencyMs, setWsLatencyMs] = useState<number | null>(null)
   const wsUrl = useMemo(() => buildWsUrl(), [])
   const socketRef = useRef<WebSocket | null>(null)
   const reconnectRef = useRef<number | null>(null)
   const rollingSummarySubscribersRef = useRef(new Set<(text: string) => void>())
+  const lastPingTsRef = useRef<number | null>(null)
+  const pingIntervalRef = useRef<number | null>(null)
 
   const requestRollingSummary = useCallback(() => {
     const socket = socketRef.current
@@ -97,15 +107,33 @@ export function useTelemetryStream(): {
       }, RECONNECT_MS)
     }
 
+    const clearPingLoop = () => {
+      if (pingIntervalRef.current !== null) {
+        window.clearInterval(pingIntervalRef.current)
+        pingIntervalRef.current = null
+      }
+    }
+
     const connect = () => {
       setConnectionState('connecting')
       clearReconnect()
+      clearPingLoop()
       const socket = new WebSocket(wsUrl)
       socketRef.current = socket
 
       socket.onopen = () => {
         if (cancelled) return
+        // Fresh slate for each connection: empty transcript, vitals placeholders (no mock carryover).
+        setTelemetry(initial)
         setConnectionState('connected')
+        clearPingLoop()
+        pingIntervalRef.current = window.setInterval(() => {
+          const sock = socketRef.current
+          if (!sock || sock.readyState !== WebSocket.OPEN) return
+          const ts = Date.now()
+          lastPingTsRef.current = ts
+          sock.send(JSON.stringify({ event_type: 'client.ping', client_ts: ts }))
+        }, 2500)
       }
 
       socket.onmessage = (event) => {
@@ -113,6 +141,15 @@ export function useTelemetryStream(): {
         try {
           const data = JSON.parse(event.data) as unknown
           if (!isEnvelope(data)) {
+            return
+          }
+
+          if (data.event_type === 'client.pong') {
+            const p = data.payload as { client_ts?: number }
+            const sent = typeof p.client_ts === 'number' ? p.client_ts : lastPingTsRef.current
+            if (typeof sent === 'number') {
+              setWsLatencyMs(Math.max(0, Math.round(Date.now() - sent)))
+            }
             return
           }
 
@@ -167,6 +204,7 @@ export function useTelemetryStream(): {
 
       socket.onclose = () => {
         if (cancelled) return
+        clearPingLoop()
         setConnectionState('fallback')
         scheduleReconnect()
       }
@@ -177,14 +215,47 @@ export function useTelemetryStream(): {
     return () => {
       cancelled = true
       clearReconnect()
+      if (pingIntervalRef.current !== null) {
+        window.clearInterval(pingIntervalRef.current)
+        pingIntervalRef.current = null
+      }
       socketRef.current?.close()
       socketRef.current = null
     }
   }, [wsUrl, initial])
 
+  /** When WS is offline, merge latest incident_feed batches (browser GPS + rPPG vitals) from FastAPI. */
+  useEffect(() => {
+    if (connectionState !== 'fallback') return
+    const url = buildIncidentRecentPollUrl()
+    if (!url) return
+
+    let cancelled = false
+    const poll = async () => {
+      try {
+        const res = await fetch(url)
+        if (!res.ok || cancelled) return
+        const data: unknown = await res.json()
+        if (!Array.isArray(data) || data.length === 0 || cancelled) return
+        const last = data[data.length - 1]
+        setTelemetry((prev) => mergeIncidentIntoTelemetry(prev, last as IncidentTelemetryRecentRow))
+      } catch {
+        /* unreachable backend / CORS */
+      }
+    }
+
+    void poll()
+    const id = window.setInterval(poll, 5000)
+    return () => {
+      cancelled = true
+      window.clearInterval(id)
+    }
+  }, [connectionState])
+
   return {
     telemetry,
     connectionState,
+    wsLatencyMs,
     requestRollingSummary,
     subscribeRollingSummary,
     requestCallerLocationRefresh,
