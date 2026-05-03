@@ -5,7 +5,7 @@ python-dotenv>=1.0.1
 openai
 deepgram-sdk>=6.0,<7
 livekit
-livekit-api
+livekit-api>=1.0.0
 pillow
 pytest>=8.0.0
 
