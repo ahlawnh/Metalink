@@ -1,92 +1,185 @@
-# D/SPATCH backend
+# D/SPATCH Backend
 
-Python **FastAPI** service: LiveKit ingestion, vision + transcription (Hacker 2), WebSocket telemetry (Hacker 4).
+FastAPI backend for **D/SPATCH**, a real-time emergency dispatch cockpit that turns a caller's phone camera, microphone, location, and telemetry into dispatcher-ready situational awareness.
 
-## What this backend does (big picture)
+This service powers:
 
-1. **Ingestion (Hacker 2)** — A hidden backend participant can join a **LiveKit** room, read the bystander’s **video** and **audio**, sample frames every ~2.5s, and run **OpenAI** vision + **Deepgram** transcription (`app/services/`).
-2. **Merge** — `telemetry_aggregate.py` combines the latest vision output + rolling transcript (e.g. “breathe” cadence, keyword hints).
-3. **Plumbing (Hacker 4)** — `broadcast.py` turns that into **Pydantic** `TelemetryUpdate` objects and pushes **v2 WebSocket events** to the dispatcher dashboard (`/api/ws/telemetry`).
-4. **Mock mode** — With `MOCK_AI=true`, no cloud AI runs; fake loops still drive the same WebSocket shape so the frontend can build the UI cheaply.
+- Live caller video/audio ingestion through **LiveKit**
+- Scene understanding with **OpenAI vision**
+- Live transcription with **Deepgram**
+- Translation-aware transcript aggregation
+- Camera-derived emergency telemetry hints
+- CPR haptic/metronome commands to caller devices
+- Real-time dispatcher dashboard updates over WebSockets
 
-**This README** covers running the **API server**. The **mic test** below only checks **Deepgram + your laptop mic**, not the full server.
+> Hackathon note: run with `MOCK_AI=true` for a reliable no-API-key demo, or `MOCK_AI=false` for the live LiveKit/OpenAI/Deepgram pipeline.
 
-## Prerequisites
+## Summary
 
-- Python **3.11+** recommended
-- Run all commands from this directory (`backend/`) so `app` imports resolve
+In emergencies, dispatchers usually rely on voice alone. D/SPATCH gives them a richer view: live caller POV, AI-suggested hazards, caller location, transcript/translation, CPR tempo cues, and pipeline health. The backend joins the same LiveKit room as the caller, processes video/audio, merges signals into one telemetry model, and broadcasts updates to the operator dashboard.
 
-## One-time setup
+```mermaid
+flowchart TD
+    caller["Caller phone camera and mic"] --> livekit["LiveKit room"]
+    livekit --> ingest["FastAPI ingestion loop"]
+    ingest --> vision["OpenAI vision"]
+    ingest --> stt["Deepgram STT"]
+    stt --> translate["OpenAI translation"]
+    vision --> aggregate["Telemetry aggregate"]
+    translate --> aggregate
+    aggregate --> ws["WebSocket telemetry"]
+    ws --> dashboard["Dispatcher dashboard"]
+    dashboard --> cpr["CPR haptic cue"]
+    cpr --> caller
+```
+
+## Key Features
+
+- **Live video/audio ingestion** — backend participant joins a LiveKit room and reads caller media streams.
+- **AI scene triage** — OpenAI vision extracts observable cues such as hazards, patient posture, cyanosis, bystander action, and chest-rise visibility.
+- **Hallucination mitigation** — low-confidence hazards are dropped and hazards must appear across multiple frames before reaching the dashboard.
+- **Live transcription** — Deepgram converts caller/dispatcher audio into timestamped transcript segments.
+- **Translation support** — non-English final transcript chunks can be translated to English while preserving original text for review.
+- **Telemetry aggregation** — combines vision, transcript, CPR cues, location, haptic state, and pipeline status into one dashboard contract.
+- **Dispatcher controls** — WebSocket messages can trigger rolling summaries, caller location refresh, and CPR metronome/haptic guidance.
+- **Mock mode** — stable local demo path with no OpenAI, Deepgram, or LiveKit calls.
+- **System health visibility** — degraded pipeline alerts are sent as system status, separate from scene hazards.
+
+## Tech Stack
+
+- **Python 3.11+**
+- **FastAPI** + Uvicorn
+- **Pydantic** telemetry schemas
+- **LiveKit** for real-time media
+- **OpenAI** for vision, summaries, and translation
+- **Deepgram** for streaming speech-to-text
+- **WebSockets** for dashboard telemetry
+
+## Quickstart
+
+Run all commands from the `backend/` directory.
 
 ```bash
 cd backend
 python3 -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
+source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-## Environment
-
-Copy the template and edit locally (never commit secrets):
-
-```bash
 cp .env.example .env
 ```
 
-Variables that matter for **fake data / Hacker 3 UI work**:
+For the easiest local demo, set these in `.env`:
 
-| Variable | Purpose |
-|----------|---------|
-| `MOCK_AI` | `true` — no OpenAI/LiveKit/Deepgram required; mock vision + transcript loops run |
-| `ENABLE_INGESTION_LOOP` | `true` — starts ingestion on server startup (required for continuous mock broadcasts) |
-| `MOCK_TELEMETRY_SCENARIO` | Initial WS scenario: `overdose_case`, `normal_case`, `scene_hazard_case`, `degraded_pipeline_case` |
-| `CORS_ORIGINS` | Comma-separated origins for the Next.js app (e.g. `http://localhost:3000`) |
+```env
+MOCK_AI=true
+ENABLE_INGESTION_LOOP=true
+```
 
-For **live** mode later: set `MOCK_AI=false` and fill `LIVEKIT_*`, `OPENAI_API_KEY`, `DEEPGRAM_API_KEY` per `.env.example`.
-
-### Troubleshooting: OpenAI usage, vision, vitals
-
-- **No OpenAI usage on the dashboard** while “using the camera”: the **browser / phone** does not call OpenAI. Only the **FastAPI ingest** worker does, using `OPENAI_API_KEY` in the same environment **uvicorn** was started from. Confirm `MOCK_AI=false` in `backend/.env` and restart the server so live vision runs (watch startup logs for the live ingest path).
-- **`MOCK_AI=true`**: mock vision and transcript loops — **no** OpenAI billable calls.
-- **Vitals on the dispatcher UI**: the vision model is not meant to invent a numeric respiratory rate from a single frame; RR and related fields are merged from transcript and other paths in `app/services/telemetry_aggregate.py`. Heart rate may come from **rPPG / incident feed** when that pipeline is active.
-- **“Pipeline Degraded”**: emitted when ingest is unhealthy (e.g. loop errors before retry). On the operator dashboard this appears under **System status**, separate from **scene hazards**.
-
-## Run the server
+Start the API:
 
 ```bash
-source .venv/bin/activate
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-- HTTP base: `http://127.0.0.1:8000`
+Useful URLs:
+
+- API base: `http://127.0.0.1:8000`
 - OpenAPI docs: `http://127.0.0.1:8000/docs`
+- Health check: `http://127.0.0.1:8000/api/health`
+- Telemetry status: `http://127.0.0.1:8000/api/telemetry/status`
 
-### Incident-feed (bystander) + telemetry
+## Environment Variables
 
-- **Operator dashboard** token (subscriber): `GET /api/livekit/token`
-- **Bystander / incident_feed** token (publish camera + mic): `GET /api/livekit/broadcaster/token`
-- **Incident telemetry** (location + vitals batches): `POST /api/incident/telemetry`
+Copy `.env.example` to `.env` and fill in local values. Never commit `.env`.
 
-Configure **`BACKEND_INTERNAL_URL=http://127.0.0.1:8000`** in `incident_feed/.env.local` so Next.js API routes can proxy to FastAPI. Requires **`livekit-api`** plus **`LIVEKIT_URL`**, **`LIVEKIT_API_KEY`**, **`LIVEKIT_API_SECRET`**, **`LIVEKIT_ROOM`** for real LiveKit joins.
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `MOCK_AI` | yes | `true` uses deterministic mock telemetry; `false` enables live cloud services. |
+| `ENABLE_INGESTION_LOOP` | yes | Starts the LiveKit/mock ingestion task on server startup. |
+| `MOCK_TELEMETRY_SCENARIO` | no | Initial mock scenario, e.g. `overdose_case`, `normal_case`, `scene_hazard_case`, `degraded_pipeline_case`. |
+| `CORS_ORIGINS` | no | Comma-separated frontend origins allowed to call the API. |
+| `LIVEKIT_URL` | live mode | LiveKit cloud/server URL. |
+| `LIVEKIT_API_KEY` | live mode | LiveKit API key. |
+| `LIVEKIT_API_SECRET` | live mode | LiveKit API secret. |
+| `LIVEKIT_ROOM` | live mode | Room the backend joins for caller media. |
+| `OPENAI_API_KEY` | live mode | Enables vision, summaries, and translation. |
+| `DEEPGRAM_API_KEY` | live mode | Enables live speech-to-text. |
+| `DEEPGRAM_MODEL` | no | Deepgram model override; defaults are loaded from config. |
+| `DEEPGRAM_LANGUAGE` | no | Language hint; `multi` is useful for demo translation flows. |
+| `BACKEND_INTERNAL_URL` | integration | Used by adjacent Next.js/incident feed services when proxying to FastAPI. |
 
-## Quick health checks
+## Running Modes
+
+### Mock Demo Mode
+
+Use this for judging, UI demos, and development without cloud credentials:
+
+```env
+MOCK_AI=true
+ENABLE_INGESTION_LOOP=true
+MOCK_TELEMETRY_SCENARIO=overdose_case
+```
+
+Behavior:
+
+- No OpenAI calls
+- No Deepgram calls
+- No LiveKit dependency required for telemetry
+- WebSocket still emits production-shaped `telemetry.update` events
+
+### Live Mode
+
+Use this when a caller is publishing camera/mic to LiveKit:
+
+```env
+MOCK_AI=false
+ENABLE_INGESTION_LOOP=true
+LIVEKIT_URL=wss://...
+LIVEKIT_API_KEY=...
+LIVEKIT_API_SECRET=...
+LIVEKIT_ROOM=...
+OPENAI_API_KEY=...
+DEEPGRAM_API_KEY=...
+```
+
+Start the backend after or shortly before the caller joins the room. If Deepgram receives no audio for its timeout window, the stream can close and the backend will retry the ingestion loop.
+
+## API Endpoints
+
+### Health and Status
 
 ```bash
 curl -s http://127.0.0.1:8000/api/health
 curl -s http://127.0.0.1:8000/api/telemetry/status
+curl -s http://127.0.0.1:8000/api/telemetry/scenarios
 ```
 
-## WebSocket (telemetry / fake data for frontend)
+### LiveKit Tokens
 
-Hacker 3 connects here:
+- Operator/dashboard subscriber token: `GET /api/livekit/token`
+- Caller/bystander publisher token: `GET /api/livekit/broadcaster/token`
+
+### Incident Telemetry
+
+- Location + vitals ingestion: `POST /api/incident/telemetry`
+- CPR haptic snapshot fallback: `GET /api/telemetry/haptic-snapshot`
+
+Configure `BACKEND_INTERNAL_URL=http://127.0.0.1:8000` in `incident_feed/.env.local` so Next.js routes can proxy to FastAPI.
+
+## WebSocket Telemetry
+
+Dispatcher clients connect to:
 
 ```text
 ws://127.0.0.1:8000/api/ws/telemetry
 ```
 
-Optional query: `?scenario=overdose_case` (see `/api/telemetry/scenarios`).
+Optional mock scenario:
 
-Every WebSocket message uses the v2 envelope:
+```text
+ws://127.0.0.1:8000/api/ws/telemetry?scenario=overdose_case
+```
+
+Every message uses this v2 envelope:
 
 ```json
 {
@@ -97,54 +190,145 @@ Every WebSocket message uses the v2 envelope:
 }
 ```
 
-On connect, the server sends `pipeline.status`, `heartbeat`, then an initial `telemetry.update` snapshot. With `MOCK_AI=true` and `ENABLE_INGESTION_LOOP=true`, the ingestion task also **broadcasts** updates from the mock pipeline (vision + transcript aggregation).
+Common event types:
 
-**CLI test** (if [websocat](https://github.com/vi/websocat) is installed):
+| Event | Meaning |
+| --- | --- |
+| `pipeline.status` | Initial connection state and mock/live mode. |
+| `heartbeat` | Keeps WebSocket status fresh. |
+| `telemetry.update` | Main dashboard payload: hazards, vitals, transcript, CPR cue, location, alerts. |
+| `telemetry.summary_updated` | Rolling summary response after client requests one. |
+| `client.pong` | Echo response for dashboard latency measurement. |
+
+Client messages supported by the backend:
+
+| Client event | Action |
+| --- | --- |
+| `client.ping` | Returns `client.pong` with the same timestamp. |
+| `request.summary` | Generates a rolling transcript summary. |
+| `request.caller_location` | Replays the latest caller location if available. |
+| `dispatcher.cpr_guidance` | Broadcasts CPR haptic/metronome state to clients. |
+| `request.dispatch_cpr` | Legacy CPR dispatch event, also maps to haptic cue. |
+
+CLI test, if `websocat` is installed:
 
 ```bash
 websocat ws://127.0.0.1:8000/api/ws/telemetry
 ```
 
-Full frontend contract: `docs/TELEMETRY_API.md`. Sample payloads: `fixtures/websocket_event_samples.json`.
+Full frontend contract: `docs/TELEMETRY_API.md`  
+Sample payloads: `fixtures/websocket_event_samples.json`
 
-## Stage 3: Mic → Deepgram stress test (local, no server)
+## Local Mic to Deepgram Test
 
-Proves **Deepgram** hears you and a tiny **stress heuristic** fires on panic phrases. Uses the same `deepgram_stream_from_pcm16` helper as the LiveKit audio path.
+This checks Deepgram and the local microphone without running the full FastAPI server.
 
-**Requirements:** `DEEPGRAM_API_KEY` in `.env`, **`MOCK_AI=false`** (otherwise the transcription module uses mock text and never calls Deepgram). Uses **deepgram-sdk v6** (`listen.v1` WebSocket API). Optional: `pip install sounddevice numpy` (listed in `requirements.txt`).
+Requirements:
+
+- `DEEPGRAM_API_KEY` in `.env`
+- `MOCK_AI=false`
+- `sounddevice` and `numpy` installed from `requirements.txt`
 
 ```bash
 cd backend
 source .venv/bin/activate
-pip install -r requirements.txt
 export MOCK_AI=false
 python -m scripts.mic_deepgram_stress_test
 ```
 
-You should see `[interim]` / `[FINAL]` lines, a growing `[buffer]`, and **`STRESS_LEVEL: CRITICAL`** after phrases like *“he’s not breathing”* or *“oh my god … help me”* (see `scripts/mic_deepgram_stress_test.py` for exact triggers). **Ctrl+C** to stop.
+Expected output:
 
-Deepgram usage may bill your project; this is not guaranteed “$0” unless your account has free credit.
+- `[interim]` transcript lines
+- `[FINAL]` transcript lines
+- Growing transcript buffer
+- `STRESS_LEVEL: CRITICAL` after phrases such as "he's not breathing" or "oh my god help me"
+
+Deepgram usage may bill your account unless covered by trial/free credit.
 
 ## Tests
 
 ```bash
-python3 -m pytest tests/ -v
-python3 -m compileall app -q
+source .venv/bin/activate
+python -m pytest tests/ -v
+python -m compileall app -q
 ```
 
-Optional 5-minute WebSocket soak:
+Optional WebSocket soak test:
 
 ```bash
-STABILITY_TEST=1 python3 -m pytest tests/test_smoke.py::test_websocket_five_minute_stability -v
+STABILITY_TEST=1 python -m pytest tests/test_smoke.py::test_websocket_five_minute_stability -v
 ```
 
-## Project layout (hackathon silos)
+## Project Layout
 
-- **`app/services/`** — Hacker 2: `livekit_ingest`, `vision`, `transcription`, `telemetry_aggregate`
-- **`app/api/`**, **`app/core/`**, **`app/schemas/`**, **`broadcast.py`** — Hacker 4: HTTP/WebSocket, config, Pydantic contracts
+```text
+backend/
+  app/
+    api/                 HTTP and WebSocket routes
+    core/                Config, constants, mock telemetry, ingestion task wrapper
+    schemas/             Pydantic WebSocket and telemetry contracts
+    services/
+      livekit_ingest.py       Joins LiveKit and reads audio/video tracks
+      vision.py               OpenAI frame analysis
+      transcription.py        Deepgram streaming STT
+      translator.py           OpenAI transcript translation
+      telemetry_aggregate.py  Merges vision, transcript, vitals, alerts
+      broadcast.py            Converts service payloads to TelemetryUpdate events
+  docs/                  Telemetry API docs
+  fixtures/              Sample WebSocket events
+  scripts/               Local development and test helpers
+  tests/                 Backend tests
+```
+
+## Demo Script
+
+1. Start backend in mock mode:
+   ```bash
+   cd backend
+   source .venv/bin/activate
+   uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+   ```
+2. Start the dispatcher frontend.
+3. Show dashboard receiving WebSocket telemetry.
+4. Toggle CPR guidance from the dashboard and point out the haptic cue state.
+5. Switch to live mode if credentials and a caller room are ready.
 
 ## Troubleshooting
 
-- **No streaming updates:** ensure `ENABLE_INGESTION_LOOP=true` and check server logs for `Ingestion loop failed` (retries every 3s).
-- **Import errors:** always run `uvicorn` from the `backend/` directory.
-- **`.env` not ignored:** confirm `backend/.env` is listed in `backend/.gitignore` and never `git add -f` it.
+### Dashboard says telemetry is offline
+
+- Make sure FastAPI is running on `127.0.0.1:8000`.
+- Confirm the frontend WebSocket URL points to `ws://127.0.0.1:8000/api/ws/telemetry`.
+- Check CORS and mixed-content issues if serving the frontend over HTTPS.
+
+### "Live ingestion unavailable" appears
+
+This means the live pipeline failed and the backend emitted a degraded system alert instead of fake scene data. Common causes:
+
+- No caller is publishing audio/video to the LiveKit room.
+- `LIVEKIT_*` variables point to the wrong room/project.
+- Deepgram closed because it received no audio within its timeout window.
+- OpenAI/Deepgram keys are missing or invalid.
+
+The ingestion wrapper retries after failures, so fixing the room/audio issue and restarting the caller usually recovers the stream.
+
+### Transcript stops temporarily
+
+Deepgram can close when it receives no audio for a timeout window. The backend catches the failure, emits degraded status, sleeps briefly, and retries. For best demos, keep the caller microphone active and join the LiveKit room before starting or shortly after starting the backend.
+
+### No OpenAI usage is visible
+
+The browser does not call OpenAI. Only the backend ingestion worker does. Check:
+
+- `MOCK_AI=false`
+- `OPENAI_API_KEY` is present in the environment that started `uvicorn`
+- Server was restarted after editing `.env`
+- A caller is publishing video frames to LiveKit
+
+### Import errors
+
+Run `uvicorn` from the `backend/` directory after activating the virtual environment.
+
+### Secrets
+
+Do not commit `.env`. The file should stay ignored by `backend/.gitignore`.
