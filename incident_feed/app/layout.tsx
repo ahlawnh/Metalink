@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Incident feed",
-  description: "Bystander incident feed",
+  description: "D/spatch caller link",
 };
 
 export default function RootLayout({
