@@ -123,5 +123,17 @@ export function normalizeTelemetryPayload(input: unknown): DashboardTelemetryPay
         typeof data.caller_location?.updated_at === 'string' ? data.caller_location.updated_at : undefined,
     },
     patient_heart: normalizePatientHeart(data),
+    haptic_cue: (() => {
+      const hc = data.haptic_cue
+      if (hc && typeof hc === 'object' && hc.active === true && hc.pattern === 'cpr_metronome') {
+        const rawBpm = hc.bpm
+        const bpm =
+          typeof rawBpm === 'number' && Number.isFinite(rawBpm)
+            ? Math.min(140, Math.max(60, Math.round(rawBpm)))
+            : 110
+        return { active: true, pattern: 'cpr_metronome' as const, bpm }
+      }
+      return { active: false, pattern: 'none' as const, bpm: null }
+    })(),
   }
 }

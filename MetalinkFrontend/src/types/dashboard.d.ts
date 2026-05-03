@@ -86,6 +86,13 @@ export interface CallerLocationTelemetry {
   updated_at?: string
 }
 
+/** Dispatcher-issued cue for bystander PWA (CPR compression cadence via vibration). */
+export interface HapticCueTelemetry {
+  active: boolean
+  pattern: 'none' | 'cpr_metronome'
+  bpm: number | null
+}
+
 export interface DashboardTelemetryPayload {
   schemaVersion: string
   updatedAt: string
@@ -98,4 +105,5 @@ export interface DashboardTelemetryPayload {
   operator: OperatorTelemetry
   caller_location: CallerLocationTelemetry
   patient_heart: PatientHeartTelemetry
+  haptic_cue: HapticCueTelemetry
 }
