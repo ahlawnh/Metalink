@@ -115,6 +115,7 @@ High-frequency telemetry from services is **debounced** before broadcast. Only t
 | `LIVEKIT_CALLER_IDENTITY`, `LIVEKIT_DISPATCHER_IDENTITY_PREFIX` | `app/services/livekit_ingest.py` | Classify LiveKit audio tracks for dual-end transcription |
 | `OPENAI_API_KEY` | `app/services/vision.py` | When `MOCK_AI=false` |
 | `DEEPGRAM_API_KEY` | `app/services/transcription.py` | When `MOCK_AI=false` |
+| `DEEPGRAM_MODEL`, `DEEPGRAM_LANGUAGE`, `DEEPGRAM_ENDPOINTING` | `app/services/transcription.py` | Live STT model/language tuning; defaults to `nova-3`, `multi`, `100` for multilingual streaming |
 | `CORS_ORIGINS` | `app/main.py` | Comma-separated browser origins |
 | `TELEMETRY_COALESCE_MS` | `app/core/outbound_coalesce.py` | Debounce window for telemetry broadcasts |
 | `HEARTBEAT_INTERVAL_SECONDS` | `app/api/telemetry.py` | WS keepalive interval |
@@ -134,6 +135,8 @@ Never commit `.env`. Use `.env.example` as a template.
 **Bystander stress:** When the rolling transcript matches panic heuristics, `build_telemetry_payload()` may set **`bystander_stress`** (`critical_panic` or `elevated_distress`) for the broadcaster.
 
 **Dual-end STT:** In live mode, the backend can transcribe both caller and dispatcher LiveKit audio tracks. The dispatcher dashboard publishes microphone audio after browser permission; ingestion classifies `caller` as caller speech and identities beginning with `metalink-operator` as dispatcher speech by default. This opens one Deepgram stream per speaker, so live dual transcription roughly doubles STT usage compared with caller-only transcription.
+
+**Multilingual STT:** Live Deepgram defaults to `DEEPGRAM_MODEL=nova-3`, `DEEPGRAM_LANGUAGE=multi`, and `DEEPGRAM_ENDPOINTING=100` so non-English and code-switched speech can flow into the existing transcript segments. Deepgram multilingual streaming transcribes supported languages; it does not guarantee an English translation string in this SDK path. If product needs English-only output, translate final transcript chunks after STT before appending them.
 
 ### Optional `dict` keys (mapped in `broadcast.py`)
 

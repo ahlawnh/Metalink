@@ -6,6 +6,8 @@ import time
 from dataclasses import dataclass
 from typing import AsyncIterator, Optional
 
+from app.core.config import get_settings
+
 
 @dataclass(frozen=True)
 class TranscriptChunk:
@@ -61,6 +63,9 @@ async def deepgram_stream_from_pcm16(
     *,
     pcm16_mono_16khz: AsyncIterator[bytes],
     deepgram_api_key: Optional[str] = None,
+    model: Optional[str] = None,
+    language: Optional[str] = None,
+    endpointing: Optional[str] = None,
 ) -> AsyncIterator[TranscriptChunk]:
     """
     Stream PCM16 mono 16kHz chunks to Deepgram live STT and yield transcript segments.
@@ -84,6 +89,12 @@ async def deepgram_stream_from_pcm16(
             "Deepgram SDK not installed. pip install 'deepgram-sdk>=6,<7'"
         ) from e
 
+    settings = get_settings()
+    deepgram_model = (model or settings.deepgram_model or "nova-3").strip()
+    deepgram_language = (language or settings.deepgram_language or "multi").strip()
+    deepgram_endpointing = endpointing if endpointing is not None else settings.deepgram_endpointing
+    deepgram_endpointing = deepgram_endpointing.strip() if deepgram_endpointing else None
+
     client = AsyncDeepgramClient(api_key=key)
     queue: asyncio.Queue[TranscriptChunk] = asyncio.Queue()
     done = asyncio.Event()
@@ -92,11 +103,12 @@ async def deepgram_stream_from_pcm16(
     # Use string "true"/"false" for booleans: the v6 SDK's query encoder emits Python
     # True → "True", and Deepgram rejects that with HTTP 400 on the WebSocket handshake.
     async with client.listen.v1.connect(
-        model="nova-2",
+        model=deepgram_model,
         encoding="linear16",
         sample_rate=16000,
         channels=1,
-        language="en-US",
+        language=deepgram_language,
+        endpointing=deepgram_endpointing,
         punctuate="true",
         smart_format="true",
         interim_results="true",

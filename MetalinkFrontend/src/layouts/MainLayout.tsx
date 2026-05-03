@@ -1,4 +1,5 @@
 import CallerLocationMapPanel from '@/components/dashboard/CallerLocationMapPanel'
+import DeployViaSmsPanel from '@/components/dashboard/DeployViaSmsPanel'
 import HazardList from '@/components/dashboard/HazardList'
 import SystemAlertsPanel from '@/components/dashboard/SystemAlertsPanel'
 import VitalsTelemetryCards from '@/components/dashboard/VitalsTelemetryCards'
@@ -15,6 +16,7 @@ export function MainLayout() {
     requestRollingSummary,
     subscribeRollingSummary,
     setCprGuidance,
+    requestCallerLocationRefresh,
   } = useTelemetryStream()
 
   const connectionLabel =
@@ -22,78 +24,143 @@ export function MainLayout() {
       ? 'Live'
       : connectionState === 'connecting'
         ? 'Connecting…'
-        : 'Fallback'
+        : 'Offline'
+
+  const connectionTone =
+    connectionState === 'connected'
+      ? 'border-white/[0.06] bg-white/[0.02] text-[var(--dash-text-secondary)]'
+      : connectionState === 'connecting'
+        ? 'border-[color-mix(in_srgb,var(--dash-accent)_40%,transparent)] bg-[color-mix(in_srgb,var(--dash-accent)_10%,var(--dash-surface-raised))] text-[var(--dash-accent)]'
+        : 'border-[color-mix(in_srgb,#FF525240%,transparent)] bg-[color-mix(in_srgb,#FF525212%,var(--dash-surface-raised))] text-[#FFAB91]'
+
+  const dotTone =
+    connectionState === 'connected'
+      ? 'bg-[var(--dash-text-secondary)]'
+      : connectionState === 'connecting'
+        ? 'animate-pulse bg-[var(--dash-accent)]'
+        : 'bg-[#FF5252]'
+
+  const criticalCount = telemetry.hazards.filter((hazard) => hazard.severity === 'critical').length
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#050505] text-[var(--dash-text-primary)]">
-      <header className="flex items-center justify-between border-b border-[var(--dash-border)] px-6 py-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-[var(--dash-text-muted)]">
-            Dispatch Bridge
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#0a0d10] text-gray-300">
+      <header className="relative flex h-12 shrink-0 items-center border-b border-white/[0.08] bg-black/50 px-4 backdrop-blur-md">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/20 to-transparent" />
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <p className="dash-label shrink-0 tracking-[0.18em] text-[color-mix(in_srgb,var(--dash-accent)_85%,var(--dash-text-secondary))]">
+            Aegis-Link
           </p>
-          <h1 className="text-2xl font-semibold">Live Telemetry</h1>
+          <span className="h-3 w-px shrink-0 bg-white/15" />
+          <p className="min-w-0 truncate text-sm font-semibold text-[var(--dash-text-primary)]">
+            Body-cam command cockpit · Session{' '}
+            <span className="font-data tabular-nums text-[var(--dash-text-secondary)]">{telemetry.session.id}</span>
+          </p>
         </div>
-        <div className="flex items-center gap-4 text-sm">
-          <span className="text-[var(--dash-text-muted)]">
-            Connection:{' '}
-            <span
-              className={cn(
-                'font-semibold',
-                connectionState === 'connected'
-                  ? 'text-[#00FF88]'
-                  : connectionState === 'connecting'
-                    ? 'text-[#FFB74D]'
-                    : 'text-[#FF1744]',
-              )}
-            >
-              {connectionLabel}
-            </span>
+        <div className="mr-3 hidden items-center gap-2 lg:flex">
+          <span
+            className={cn(
+              'rounded-full border px-2.5 py-1 font-data text-[10px] font-semibold uppercase tracking-[0.14em]',
+              criticalCount > 0
+                ? 'border-red-400/45 bg-red-950/35 text-red-100 drop-shadow-[0_0_6px_rgba(255,23,68,0.25)]'
+                : 'border-white/10 bg-white/[0.03] text-[var(--dash-text-secondary)]',
+            )}
+          >
+            {criticalCount > 0 ? `${criticalCount} critical` : 'no critical'}
           </span>
-          <span className="text-[var(--dash-text-muted)]">
-            WS RTT:{' '}
-            <span className="font-semibold text-[var(--dash-text-primary)]">
-              {wsLatencyMs !== null ? `${wsLatencyMs} ms` : '—'}
-            </span>
+          <span className="rounded-full border border-white/[0.06] bg-white/[0.02] px-2.5 py-1 font-data text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dash-text-secondary)]">
+            {telemetry.video.streamStatus}
+          </span>
+          <span className="font-data text-[10px] font-semibold tabular-nums text-[var(--dash-text-secondary)]">
+            WS RTT{' '}
+            <span className="text-[var(--dash-text-primary)]">{wsLatencyMs !== null ? `${wsLatencyMs}` : '—'} ms</span>
           </span>
         </div>
+        <span
+          className={cn(
+            'inline-flex shrink-0 items-center gap-2 rounded-full border font-data text-[10px] font-semibold uppercase',
+            connectionState === 'connected'
+              ? 'border-white/[0.06] bg-white/[0.02] px-2.5 py-1 tracking-[0.14em] text-[var(--dash-text-secondary)]'
+              : 'px-3 py-1 tracking-[0.14em]',
+            connectionTone,
+          )}
+          role="status"
+          aria-live="polite"
+        >
+          <span className={cn('size-1.5 shrink-0 rounded-full', dotTone)} aria-hidden />
+          Telemetry · {connectionLabel}
+        </span>
       </header>
 
-      <div className="grid flex-1 grid-cols-[minmax(0,1fr)_420px] gap-6 overflow-hidden px-6 pb-6">
-        <section className="flex min-h-0 flex-col gap-4 overflow-hidden">
-          <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-[var(--dash-border)] bg-[var(--dash-surface)] shadow-[0_0_25px_rgba(0,255,136,0.08)]">
-            <VideoPlayer
-              streamUrl={telemetry.video.streamUrl}
-              posterUrl={telemetry.video.posterUrl}
-              streamStatus={telemetry.video.streamStatus}
-              wsLatencyMs={wsLatencyMs}
-            />
+      <div className="flex flex-1 flex-row overflow-hidden">
+        <aside className="flex w-80 shrink-0 flex-col gap-3 overflow-y-auto border-r border-white/[0.08] p-3">
+          <div className="flex items-center justify-between px-1">
+            <p className="dash-label tracking-[0.14em]">Situations / vitals</p>
+            <span className="font-data text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dash-text-secondary)]">
+              triage stack
+            </span>
           </div>
-          <div className="h-40 shrink-0 overflow-hidden rounded-2xl border border-[var(--dash-border)] bg-[var(--dash-surface)] p-3">
-            <CallerLocationMapPanel location={telemetry.caller_location} />
+          <div className="dash-card shrink-0 p-3">
+            <HazardList hazards={telemetry.hazards} />
           </div>
-        </section>
+          <VitalsTelemetryCards
+            patient={telemetry.patient_heart}
+            respiratory={telemetry.respiratory}
+            cprGuidance={telemetry.cpr_guidance}
+            onCprGuidance={setCprGuidance}
+            wsConnected={connectionState === 'connected'}
+            telemetryCueRevision={Math.floor(Date.parse(telemetry.updatedAt) / 1000) || 0}
+          />
+          <SystemAlertsPanel alerts={telemetry.systemAlerts} />
+        </aside>
 
-        <aside className="flex min-h-0 flex-col gap-4 overflow-hidden">
-          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-            <div className="flex flex-col gap-4">
-              <VitalsTelemetryCards
-                patient={telemetry.patient_heart}
-                respiratory={telemetry.respiratory}
-                cprGuidance={telemetry.cpr_guidance}
-                onCprGuidance={setCprGuidance}
-                wsConnected={connectionState === 'connected'}
-                telemetryCueRevision={Math.floor(Date.parse(telemetry.updatedAt) / 1000) || 0}
+        <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(0,229,255,0.10),transparent_55%)]" />
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] opacity-60" />
+          <div className="relative flex min-h-0 flex-1 flex-col gap-3 p-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06),inset_0_18px_48px_rgba(0,0,0,0.55)]">
+            <div className="pointer-events-none absolute left-5 top-5 z-30 max-w-[min(36rem,calc(100%-3rem))] overflow-hidden rounded-lg border border-white/[0.09] bg-black/60 px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.07),0_20px_52px_rgba(0,0,0,0.55)] backdrop-blur-md">
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/35 to-transparent" />
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <p className="dash-label tracking-[0.16em] text-cyan-100/70">Scene intelligence</p>
+                <span className="font-data text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dash-text-secondary)]">
+                  {telemetry.caller_location.label}
+                </span>
+              </div>
+              <p className="mt-1 truncate text-sm font-semibold text-[var(--dash-text-primary)]">
+                {telemetry.hazards[0]?.description || 'Live caller POV and fused location telemetry active.'}
+              </p>
+            </div>
+            <div className="min-h-0 flex-[3] overflow-hidden rounded-xl border border-white/10 bg-black/30 shadow-[0_22px_70px_rgba(0,0,0,0.5)]">
+              <VideoPlayer
+                streamUrl={telemetry.video.streamUrl}
+                posterUrl={telemetry.video.posterUrl}
+                streamStatus={telemetry.video.streamStatus}
+                wsLatencyMs={wsLatencyMs}
               />
-              <SystemAlertsPanel alerts={telemetry.systemAlerts} />
-              <HazardList hazards={telemetry.hazards} />
-              <TranscriptSummary
-                chunks={telemetry.transcript}
-                requestRollingSummary={requestRollingSummary}
-                subscribeRollingSummary={subscribeRollingSummary}
+            </div>
+            <div className="min-h-0 flex-[2] shrink-0 overflow-hidden rounded-xl border border-white/10 bg-black/30 shadow-[0_16px_54px_rgba(0,0,0,0.42)] [&>section]:h-full">
+              <CallerLocationMapPanel
+                location={telemetry.caller_location}
+                onRefreshLocation={requestCallerLocationRefresh}
                 wsConnected={connectionState === 'connected'}
               />
             </div>
           </div>
+        </section>
+
+        <aside className="flex w-80 shrink-0 flex-col gap-3 overflow-y-auto border-l border-white/[0.08] p-3">
+          <div className="flex items-center justify-between px-1">
+            <p className="dash-label tracking-[0.14em]">AI intelligence</p>
+            <span className="font-data text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dash-text-secondary)]">
+              transcript
+            </span>
+          </div>
+          <DeployViaSmsPanel />
+          <TranscriptSummary
+            chunks={telemetry.transcript}
+            requestRollingSummary={requestRollingSummary}
+            subscribeRollingSummary={subscribeRollingSummary}
+            wsConnected={connectionState === 'connected'}
+          />
         </aside>
       </div>
     </div>

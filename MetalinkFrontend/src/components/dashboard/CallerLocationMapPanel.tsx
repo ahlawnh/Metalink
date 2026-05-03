@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Circle, GoogleMap, Marker, useJsApiLoader } from '@react-google-maps/api'
+import { cn } from '@/lib/utils'
 import type { CallerLocationTelemetry } from '@/types/dashboard'
 
 const MAP_CONTAINER_STYLE: { width: string; height: string } = { width: '100%', height: '100%' }
 
 interface CallerLocationMapPanelProps {
   location: CallerLocationTelemetry
+  wsConnected?: boolean
+  onRefreshLocation?: () => void
 }
 
 function hasValidCoords(location: CallerLocationTelemetry): boolean {
@@ -118,9 +121,24 @@ function GoogleMapEmbed({ center, accuracyM }: MapEmbedProps) {
   )
 }
 
-export default function CallerLocationMapPanel({ location }: CallerLocationMapPanelProps) {
+export default function CallerLocationMapPanel({
+  location,
+  wsConnected = false,
+  onRefreshLocation,
+}: CallerLocationMapPanelProps) {
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const hasCoords = hasValidCoords(location)
   const mapsKey = Boolean(import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim())
+
+  const handleRefresh = () => {
+    if (!onRefreshLocation) return
+    setIsRefreshing(true)
+    try {
+      onRefreshLocation()
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
 
   const center = useMemo<google.maps.LatLngLiteral | null>(() => {
     if (!hasCoords) return null
@@ -130,18 +148,33 @@ export default function CallerLocationMapPanel({ location }: CallerLocationMapPa
   const latLabel = hasCoords ? location.latitude.toFixed(5) : '—'
   const lngLabel = hasCoords ? location.longitude.toFixed(5) : '—'
 
+  const showRefresh = typeof onRefreshLocation === 'function'
+
   return (
-    <section className="dash-card flex min-h-0 flex-1 flex-col p-4" aria-label="Caller location map">
-      <div>
-        <p className="dash-label">Caller location</p>
-        <p className="mt-2 text-xl font-bold leading-snug text-[var(--dash-text-primary)]">{location.label}</p>
+    <section className="dash-card flex min-h-0 flex-1 flex-col p-3" aria-label="Caller location map">
+      <div className={cn(showRefresh && 'flex flex-wrap items-start justify-between gap-3')}>
+        <div>
+          <p className="dash-label tracking-[0.14em]">Caller location</p>
+          <p className="mt-1 text-lg font-bold leading-snug text-[var(--dash-text-primary)]">{location.label}</p>
+        </div>
+        {showRefresh ? (
+          <button
+            type="button"
+            disabled={!wsConnected || isRefreshing}
+            onClick={handleRefresh}
+            title={wsConnected ? undefined : 'Connect to telemetry to refresh fused GPS'}
+            className="rounded-md bg-[var(--dash-surface-raised)] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--dash-text-primary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ring-white/[0.1] hover:bg-[color-mix(in_srgb,var(--dash-surface-raised)_90%,#fff)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00E5FF] disabled:pointer-events-none disabled:opacity-45"
+          >
+            {isRefreshing ? 'Refreshing…' : 'Refresh location'}
+          </button>
+        ) : null}
       </div>
 
-      <div className="relative mt-4 min-h-[220px] flex-1 overflow-hidden rounded-lg bg-[var(--dash-bg)] ring-1 ring-white/[0.06] md:min-h-[280px]">
+      <div className="relative mt-2 min-h-0 flex-1 overflow-hidden rounded-lg bg-[var(--dash-bg)] ring-1 ring-white/[0.06]">
         {mapsKey && center ? (
           <GoogleMapEmbed center={center} accuracyM={location.accuracy_m} />
         ) : (
-          <div className="flex h-full min-h-[220px] flex-col items-center justify-center gap-2 px-4 text-center md:min-h-[280px]">
+          <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
             <p className="text-sm font-medium text-[var(--dash-text-secondary)]">
               Interactive map disabled — add{' '}
               <span className="font-data text-[var(--dash-text-primary)]">VITE_GOOGLE_MAPS_API_KEY</span> to enable live
@@ -151,49 +184,30 @@ export default function CallerLocationMapPanel({ location }: CallerLocationMapPa
         )}
 
         {hasCoords ? (
-          <div className="pointer-events-none absolute bottom-0 left-0 right-0 bg-[color-mix(in_srgb,var(--dash-bg)_78%,transparent)] px-3 py-2 backdrop-blur-md">
-            <div className="flex flex-wrap gap-x-6 gap-y-1 font-data text-[13px] font-bold tabular-nums text-[var(--dash-text-primary)]">
+          <div className="pointer-events-none absolute bottom-0 left-0 right-0 bg-[color-mix(in_srgb,var(--dash-bg)_82%,transparent)] px-3 py-2 backdrop-blur-md">
+            <div className="flex flex-wrap items-baseline gap-x-5 gap-y-0.5 font-data text-[13px] font-bold tabular-nums text-[var(--dash-text-primary)]">
               <span>
-                <span className="mr-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dash-text-secondary)]">
-                  Lat
-                </span>
+                <span className="mr-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dash-text-secondary)]">Lat</span>
                 {latLabel}
               </span>
               <span>
-                <span className="mr-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dash-text-secondary)]">
-                  Lng
-                </span>
+                <span className="mr-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dash-text-secondary)]">Lng</span>
                 {lngLabel}
               </span>
+              {typeof location.accuracy_m === 'number' ? (
+                <span className="text-[11px] font-semibold text-[var(--dash-text-secondary)]">
+                  ±{Math.round(location.accuracy_m)} m
+                </span>
+              ) : null}
             </div>
+            {typeof location.updated_at === 'string' ? (
+              <p className="mt-0.5 font-data text-[10px] tabular-nums text-[var(--dash-text-secondary)]">
+                Updated {new Date(location.updated_at).toLocaleTimeString()}
+              </p>
+            ) : null}
           </div>
         ) : null}
       </div>
-
-      <dl className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-        <div className="dash-inset px-3 py-2">
-          <dt className="dash-label">Latitude</dt>
-          <dd className="mt-1 font-data text-lg font-bold tabular-nums text-[var(--dash-text-primary)]">{latLabel}</dd>
-        </div>
-        <div className="dash-inset px-3 py-2">
-          <dt className="dash-label">Longitude</dt>
-          <dd className="mt-1 font-data text-lg font-bold tabular-nums text-[var(--dash-text-primary)]">{lngLabel}</dd>
-        </div>
-        {typeof location.accuracy_m === 'number' ? (
-          <div className="dash-inset px-3 py-2 sm:col-span-2">
-            <dt className="dash-label">Estimated accuracy</dt>
-            <dd className="mt-1 font-data text-lg font-bold tabular-nums text-[var(--dash-text-primary)]">
-              ± {Math.round(location.accuracy_m)} m
-            </dd>
-          </div>
-        ) : null}
-      </dl>
-
-      {typeof location.updated_at === 'string' ? (
-        <p className="mt-3 font-data text-[11px] tabular-nums text-[var(--dash-text-secondary)]">
-          Last updated {new Date(location.updated_at).toLocaleString()}
-        </p>
-      ) : null}
     </section>
   )
 }

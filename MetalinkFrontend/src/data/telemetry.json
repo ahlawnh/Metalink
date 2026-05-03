@@ -11,7 +11,7 @@
     "estimated_respiratory_rate": 0,
     "respiratory_status": "normal",
     "confidence": 0,
-    "source": "mock",
+    "source": "ai",
     "history_rr": []
   },
   "hazards": [],

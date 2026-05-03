@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useSmoothedBpm } from '@/hooks/useSmoothedBpm'
 import { useSmoothedRr } from '@/hooks/useSmoothedRr'
 import { cn } from '@/lib/utils'
@@ -120,6 +120,8 @@ function CprTempoControl({
 }) {
   const [targetBpm, setTargetBpm] = useState(110)
   const [open, setOpen] = useState(false)
+  const [panelStyle, setPanelStyle] = useState<{ top: number; left: number } | null>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (cprGuidance.active && typeof cprGuidance.bpm === 'number') {
@@ -127,11 +129,18 @@ function CprTempoControl({
     }
   }, [cprGuidance.active, cprGuidance.bpm])
 
+  const handleToggle = useCallback(() => {
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect()
+      setPanelStyle({ top: rect.bottom + 6, left: rect.left })
+    }
+    setOpen((o) => !o)
+  }, [open])
+
   const live = cprGuidance.active && typeof cprGuidance.bpm === 'number'
-  const disabled = !wsConnected
 
   return (
-    <div className="relative flex items-center gap-1.5">
+    <div className="flex items-center gap-1.5">
       {live ? (
         <span
           className="inline-flex items-center gap-1.5 rounded-full border border-red-500/50 bg-red-950/50 px-2 py-0.5 font-data text-[9px] font-semibold uppercase tracking-[0.1em] text-red-200"
@@ -142,16 +151,16 @@ function CprTempoControl({
         </span>
       ) : null}
       <button
+        ref={btnRef}
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={handleToggle}
         className={cprTriggerBtn}
-        disabled={disabled}
-        title={disabled ? 'Connect to telemetry to send CPR tempo' : 'CPR compression tempo for caller'}
+        title="CPR compression tempo for caller"
         aria-expanded={open}
       >
         CPR tempo
       </button>
-      {open ? (
+      {open && panelStyle ? (
         <>
           <button
             type="button"
@@ -159,7 +168,10 @@ function CprTempoControl({
             aria-label="Close CPR tempo panel"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute right-0 top-full z-[90] mt-1 w-[min(100vw-2rem,17rem)] rounded-lg border border-white/[0.08] bg-[var(--dash-surface-raised)] p-3 shadow-xl ring-1 ring-black/40">
+          <div
+            className="fixed z-[90] w-[min(100vw-2rem,17rem)] rounded-lg border border-white/[0.08] bg-[var(--dash-surface-raised)] p-3 shadow-xl ring-1 ring-black/40"
+            style={{ top: panelStyle.top, left: panelStyle.left }}
+          >
             <p className="dash-label pb-2 normal-case">Compression tempo (60–140 BPM)</p>
             <label className="flex flex-col gap-1">
               <span className="font-data text-xl font-bold tabular-nums text-[var(--dash-text-primary)]">
@@ -186,7 +198,8 @@ function CprTempoControl({
                 <button
                   type="button"
                   className={cn(cprPanelBtn, 'bg-[color-mix(in_srgb,#FF174418%,var(--dash-bg))]')}
-                  disabled={disabled}
+                  disabled={!wsConnected}
+                  title={!wsConnected ? 'Connect to telemetry to send CPR tempo' : undefined}
                   onClick={() => {
                     onCprGuidance(true, targetBpm)
                     setOpen(false)
@@ -198,7 +211,7 @@ function CprTempoControl({
                 <button
                   type="button"
                   className={cprStopBtn}
-                  disabled={disabled}
+                  disabled={!wsConnected}
                   onClick={() => {
                     onCprGuidance(false, null)
                     setOpen(false)
