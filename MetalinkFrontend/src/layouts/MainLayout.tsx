@@ -1,4 +1,5 @@
 import CallerLocationMapPanel from '@/components/dashboard/CallerLocationMapPanel'
+import HazardList from '@/components/dashboard/HazardList'
 import VitalsTelemetryCards from '@/components/dashboard/VitalsTelemetryCards'
 import TranscriptSummary from '@/components/dashboard/TranscriptSummary'
 import VideoPlayer from '@/components/dashboard/VideoPlayer'
@@ -71,6 +72,7 @@ export function MainLayout() {
           respiratory={telemetry.respiratory}
           telemetryCueRevision={Math.floor(Date.parse(telemetry.updatedAt) / 1000) || 0}
         />
+        <HazardList hazards={telemetry.hazards} />
         <TranscriptSummary
           chunks={telemetry.transcript}
           requestRollingSummary={requestRollingSummary}
