@@ -356,17 +356,17 @@ async def _vision_loop_from_livekit_track(
     print("[ingest-debug] VideoStream opened; sampling frames for vision", flush=True)
     try:
         async for event in stream:
+            print("🚨 RAW FRAME RECEIVED FROM STREAM", flush=True)
             now = time.time()
             if now - last < interval_s:
                 continue
-            last = now
 
             vf = event.frame
             try:
                 rgb = vf.convert(rtc.VideoBufferType.RGB24)
-            except Exception as conv_exc:
-                logger.warning("[ingest-debug] vf.convert(RGB24) failed (skipping frame): %s", conv_exc, exc_info=True)
-                print(f"[ingest-debug] vf.convert(RGB24) FAILED: {conv_exc!r}", flush=True)
+            except Exception:
+                logger.exception("[ingest-debug] vf.convert(RGB24) failed (skipping frame)")
+                print("[ingest-debug] vf.convert(RGB24) FAILED (see logs)", flush=True)
                 continue
 
             try:
@@ -376,14 +376,15 @@ async def _vision_loop_from_livekit_track(
                 buf = BytesIO()
                 im.save(buf, format="JPEG", quality=85, optimize=True)
                 jpeg_bytes = buf.getvalue()
-            except Exception as pil_exc:
-                logger.warning("[ingest-debug] PIL JPEG encode failed (skipping frame): %s", pil_exc, exc_info=True)
-                print(f"[ingest-debug] PIL JPEG encode FAILED: {pil_exc!r}", flush=True)
+            except Exception:
+                logger.exception("[ingest-debug] PIL JPEG encode failed (skipping frame)")
+                print("[ingest-debug] PIL JPEG encode FAILED (see logs)", flush=True)
                 continue
 
             jpeg_bytes = await _downscale_jpeg_to_max_width(jpeg_bytes, max_width=frame_max_width)
             frame_b64 = base64.b64encode(jpeg_bytes).decode("ascii")
             frame_tick += 1
+            last = now
 
             pre = (
                 f"[ingest-debug] ABOUT TO CALL analyze_frame_with_gpt54 tick={frame_tick} "
