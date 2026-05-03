@@ -14,11 +14,15 @@ function parseCueFromPayload(payload: unknown): IncidentCprHapticCue | null {
   const p = payload as Record<string, unknown>;
   if (!("haptic_cue" in p)) return null;
   const hc = p.haptic_cue;
-  if (!hc || typeof hc !== "object") {
-    return { kind: "off" };
-  }
+  // Ingest often sends `"haptic_cue": null` on routine vitals — must NOT clear an active CPR broadcast.
+  if (hc === null || hc === undefined) return null;
+  if (typeof hc !== "object") return null;
+
   const h = hc as Record<string, unknown>;
-  if (h.active === true && h.pattern === "cpr_metronome") {
+  const pattern = h.pattern;
+  const active = h.active;
+
+  if (active === true && pattern === "cpr_metronome") {
     const raw = h.bpm;
     const bpm =
       typeof raw === "number" && Number.isFinite(raw)
@@ -26,12 +30,17 @@ function parseCueFromPayload(payload: unknown): IncidentCprHapticCue | null {
         : 110;
     return { kind: "on", bpm };
   }
-  return { kind: "off" };
+
+  if (active === false || pattern === "none") {
+    return { kind: "off" };
+  }
+
+  return null;
 }
 
 /**
  * Subscribes to telemetry WebSocket only to read `haptic_cue` updates.
- * Ignores frames that omit `haptic_cue` so routine vitals traffic does not clear an active cue.
+ * Ignores frames that omit `haptic_cue` or send `null` so routine vitals traffic does not clear an active cue.
  */
 export function useIncidentCprHapticListener(enabled: boolean): IncidentCprHapticCue {
   const [cue, setCue] = useState<IncidentCprHapticCue>({ kind: "off" });

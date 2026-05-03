@@ -92,7 +92,7 @@ export interface CprGuidanceTelemetry {
   bpm: number | null
 }
 
-/** Dispatcher-issued cue for bystander PWA (CPR compression cadence via vibration). */
+/** Dispatcher-issued cue for bystander PWA (CPR cadence; caller plays low-frequency buzz audio). */
 export interface HapticCueTelemetry {
   active: boolean
   pattern: 'none' | 'cpr_metronome'

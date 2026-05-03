@@ -43,7 +43,7 @@ export default function CprMetronomeDispatchPanel({
         Bystander CPR metronome
       </p>
       <p className="mt-1 text-xs text-[var(--dash-text-secondary)]">
-        Sends vibration cadence to the caller&apos;s incident feed (compression tempo, not medical advice).
+        Sends low-frequency buzz cues to the caller&apos;s incident feed speaker (compression tempo, not medical advice).
       </p>
       <div className="mt-3 flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-[11px] font-medium text-[var(--dash-text-secondary)]">

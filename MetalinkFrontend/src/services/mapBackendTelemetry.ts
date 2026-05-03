@@ -139,7 +139,14 @@ function mergeHapticCue(
     return previous
   }
   const hc = envelope.haptic_cue as BackendHapticCue | null | undefined
-  if (hc && typeof hc === 'object' && hc.active === true && hc.pattern === 'cpr_metronome') {
+  // Routine ingest emits explicit null — keep dispatcher CPR state until an object clears it.
+  if (hc === null || hc === undefined) {
+    return previous
+  }
+  if (typeof hc !== 'object') {
+    return previous
+  }
+  if (hc.active === true && hc.pattern === 'cpr_metronome') {
     const rawBpm = hc.bpm
     const bpm =
       typeof rawBpm === 'number' && Number.isFinite(rawBpm)

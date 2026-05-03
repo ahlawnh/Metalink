@@ -1,6 +1,7 @@
 "use client";
 
 import type { IncidentCprHapticCue } from "@/hooks/useIncidentCprHapticListener";
+import { playCprBuzzPulse, resumeAudioContext } from "@/lib/cprBuzzAudio";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Phase = "hidden" | "intro" | "countdown" | "vibrating";
@@ -13,18 +14,15 @@ export function CprDispatcherGuidance({ cue }: Props) {
   const [phase, setPhase] = useState<Phase>("hidden");
   const [countdown, setCountdown] = useState(5);
   const [activeBpm, setActiveBpm] = useState<number | null>(null);
-  const vibrateIntervalRef = useRef<number | null>(null);
+  const buzzIntervalRef = useRef<number | null>(null);
   const countdownTimerRef = useRef<number | null>(null);
   const prevOnRef = useRef(false);
   const bpmRef = useRef(110);
 
-  const clearVibrate = useCallback(() => {
-    if (vibrateIntervalRef.current !== null) {
-      window.clearInterval(vibrateIntervalRef.current);
-      vibrateIntervalRef.current = null;
-    }
-    if (typeof navigator !== "undefined" && navigator.vibrate) {
-      navigator.vibrate(0);
+  const clearBuzz = useCallback(() => {
+    if (buzzIntervalRef.current !== null) {
+      window.clearInterval(buzzIntervalRef.current);
+      buzzIntervalRef.current = null;
     }
   }, []);
 
@@ -40,7 +38,7 @@ export function CprDispatcherGuidance({ cue }: Props) {
     if (!on) {
       prevOnRef.current = false;
       clearCountdown();
-      clearVibrate();
+      clearBuzz();
       setPhase("hidden");
       setActiveBpm(null);
       return;
@@ -51,30 +49,49 @@ export function CprDispatcherGuidance({ cue }: Props) {
     if (!prevOnRef.current) {
       prevOnRef.current = true;
       clearCountdown();
-      clearVibrate();
+      clearBuzz();
       setActiveBpm(cue.bpm);
       setPhase("intro");
       setCountdown(5);
+      void resumeAudioContext().then((ctx) => {
+        if (ctx) {
+          playCprBuzzPulse(ctx, {
+            peakGain: 0.21,
+            durationSec: 0.09,
+            freqHz: 72,
+          });
+        }
+      });
       return;
     }
 
     setActiveBpm(cue.bpm);
-  }, [cue, clearCountdown, clearVibrate]);
+  }, [cue, clearCountdown, clearBuzz]);
 
   useEffect(() => {
     if (phase !== "vibrating" || activeBpm === null) return;
-    const periodMs = Math.round(60000 / activeBpm);
-    const pulseMs = Math.min(140, Math.max(60, Math.floor(periodMs * 0.28)));
-    navigator.vibrate?.(pulseMs);
-    const id = window.setInterval(() => {
-      navigator.vibrate?.(pulseMs);
-    }, periodMs);
-    vibrateIntervalRef.current = id;
+    let cancelled = false;
+
+    void resumeAudioContext().then((ctx) => {
+      if (cancelled || !ctx) return;
+      const periodMs = Math.round(60000 / activeBpm);
+      playCprBuzzPulse(ctx);
+      if (cancelled) return;
+      const id = window.setInterval(() => {
+        playCprBuzzPulse(ctx);
+      }, periodMs);
+      if (cancelled) {
+        window.clearInterval(id);
+        return;
+      }
+      buzzIntervalRef.current = id;
+    });
+
     return () => {
-      window.clearInterval(id);
-      vibrateIntervalRef.current = null;
-      if (typeof navigator !== "undefined" && navigator.vibrate) {
-        navigator.vibrate(0);
+      cancelled = true;
+      if (buzzIntervalRef.current !== null) {
+        window.clearInterval(buzzIntervalRef.current);
+        buzzIntervalRef.current = null;
       }
     };
   }, [phase, activeBpm]);
@@ -82,9 +99,9 @@ export function CprDispatcherGuidance({ cue }: Props) {
   useEffect(() => {
     return () => {
       clearCountdown();
-      clearVibrate();
+      clearBuzz();
     };
-  }, [clearCountdown, clearVibrate]);
+  }, [clearCountdown, clearBuzz]);
 
   const startMetronome = useCallback((bpm: number) => {
     bpmRef.current = bpm;
@@ -93,7 +110,9 @@ export function CprDispatcherGuidance({ cue }: Props) {
   }, []);
 
   const onUnderstood = useCallback(() => {
-    navigator.vibrate?.(40);
+    void resumeAudioContext().then((ctx) => {
+      if (ctx) playCprBuzzPulse(ctx, { peakGain: 0.12, durationSec: 0.055, freqHz: 88 });
+    });
     setPhase("countdown");
     setCountdown(5);
     clearCountdown();
@@ -137,16 +156,16 @@ export function CprDispatcherGuidance({ cue }: Props) {
               <li className="flex gap-2">
                 <span className="font-semibold text-emerald-400">1.</span>
                 <span>
-                  Put this phone somewhere on your body where you can clearly feel
-                  vibrations — for example a pocket against your hip or a shirt
-                  pocket on your chest.
+                  Turn your volume up so you can hear the low buzz through the speaker.
+                  Place the phone nearby where you can hear it clearly while doing
+                  compressions.
                 </span>
               </li>
               <li className="flex gap-2">
                 <span className="font-semibold text-emerald-400">2.</span>
                 <span>
-                  Perform CPR according to the vibrations: after the countdown,
-                  each pulse is when to push on the chest — stay on that steady beat.
+                  After the countdown, each buzz is your cue to push on the chest —
+                  stay on that steady beat.
                 </span>
               </li>
             </ol>
@@ -163,7 +182,7 @@ export function CprDispatcherGuidance({ cue }: Props) {
         {phase === "countdown" ? (
           <>
             <p className="text-base font-medium text-white">
-              Vibrations will start in {countdown} second{countdown === 1 ? "" : "s"}.
+              Buzz cues will start in {countdown} second{countdown === 1 ? "" : "s"}.
             </p>
             <p
               className="mt-6 font-data text-7xl font-bold tabular-nums text-emerald-400"
@@ -172,14 +191,14 @@ export function CprDispatcherGuidance({ cue }: Props) {
               {countdown > 0 ? countdown : "—"}
             </p>
             <p className="mt-4 text-xs text-white/55">
-              Keep the phone in place so you feel each pulse.
+              Keep the speaker unobstructed so you hear each buzz.
             </p>
           </>
         ) : null}
 
         {phase === "vibrating" && activeBpm ? (
           <>
-            <p className="text-lg font-semibold text-white">Compress with each vibration</p>
+            <p className="text-lg font-semibold text-white">Compress with each buzz</p>
             <p className="mt-2 text-sm text-white/75">
               Tempo: <span className="font-data tabular-nums text-emerald-400">{activeBpm}</span>{" "}
               compressions per minute
