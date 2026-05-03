@@ -219,6 +219,47 @@ async def run_ingestion_loop(
     video_tracks: list[Any] = []
     transcript_tasks: dict[TranscriptSpeaker, asyncio.Task[None]] = {}
     tasks: list[asyncio.Task[None]] = []
+    vision_loop_started = False
+
+    loop = asyncio.get_running_loop()
+
+    def _try_start_vision_loop(*, deferred: bool) -> None:
+        """Start at most one vision task when a camera track is available (early or after audio)."""
+        nonlocal vision_loop_started
+        if vision_loop_started:
+            return
+        picked = _pick_preferred_camera_video_track(video_tracks)
+        if picked is None:
+            return
+        vision_loop_started = True
+        label = (
+            "starting vision loop (deferred, after audio)"
+            if deferred
+            else f"starting vision loop (sample every {cfg.frame_sample_interval_s}s)"
+        )
+        vmsg = f"[ingest-debug] {label} openai_model={openai_model!r}"
+        logger.info(vmsg)
+        print(vmsg, flush=True)
+        tasks.append(
+            asyncio.create_task(
+                _vision_loop_from_livekit_track(
+                    state=state,
+                    video_track=picked,
+                    interval_s=cfg.frame_sample_interval_s,
+                    openai_model=openai_model,
+                    frame_max_width=frame_max_width,
+                )
+            )
+        )
+
+    def _schedule_try_start_vision_loop(*, deferred: bool) -> None:
+        def _run() -> None:
+            try:
+                _try_start_vision_loop(deferred=deferred)
+            except Exception:
+                logger.exception("[ingest-debug] _try_start_vision_loop failed")
+
+        loop.call_soon_threadsafe(_run)
 
     def on_track_subscribed(track: Any, *args: Any) -> None:
         kind = getattr(track, "kind", None)
@@ -234,6 +275,8 @@ async def run_ingestion_loop(
             logger.info(msg)
             print(msg, flush=True)
             video_tracks.append(track)
+            # Audio may have unlocked the wait loop first; start vision when video arrives later.
+            _schedule_try_start_vision_loop(deferred=True)
         elif kind == rtc.TrackKind.KIND_AUDIO:
             identity = _identity_from_track_args(args)
             speaker = classify_livekit_audio_participant(identity, backend_identity=cfg.identity)
@@ -261,32 +304,18 @@ async def run_ingestion_loop(
             raise RuntimeError("Timed out waiting for LiveKit tracks.")
         await asyncio.sleep(0.1)
 
-    video_track = _pick_preferred_camera_video_track(video_tracks)
-    if video_track is None:
+    if not video_tracks:
         w = (
-            "[ingest-debug] WARNING: no remote VIDEO track after wait — OpenAI vision will NOT run. "
-            "Common causes: camera off, publisher video not started, or wrong room. "
+            "[ingest-debug] No remote VIDEO track yet (audio or other tracks present). "
+            "OpenAI vision will start automatically when a camera track is subscribed. "
+            "If it never starts: camera off, publisher video not started, or wrong room. "
             f"audio_tracks_started={list(transcript_tasks.keys())!r}"
         )
         logger.warning(w)
         print(w, flush=True)
-    else:
-        vmsg = f"[ingest-debug] starting vision loop (sample every {cfg.frame_sample_interval_s}s) openai_model={openai_model!r}"
-        logger.info(vmsg)
-        print(vmsg, flush=True)
 
-    if video_track is not None:
-        tasks.append(
-            asyncio.create_task(
-                _vision_loop_from_livekit_track(
-                    state=state,
-                    video_track=video_track,
-                    interval_s=cfg.frame_sample_interval_s,
-                    openai_model=openai_model,
-                    frame_max_width=frame_max_width,
-                )
-            )
-        )
+    # Video may already be in video_tracks (e.g. video before audio). Callback path handles late video.
+    _try_start_vision_loop(deferred=False)
 
     try:
         await asyncio.gather(*tasks)
