@@ -1,4 +1,4 @@
-# Aegis-Link Frontend
+# D/SPATCH Frontend
 
 Dispatcher dashboard for live emergency telemetry.
 

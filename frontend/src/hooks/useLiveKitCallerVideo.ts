@@ -84,7 +84,7 @@ export function useLiveKitCallerVideo(
 
     const callerIdentity = envTrim('VITE_LIVEKIT_CALLER_PARTICIPANT_IDENTITY') || 'caller'
     const legacyOperatorAlias = envTrim('VITE_LIVEKIT_OPERATOR_PARTICIPANT_IDENTITY') || 'dispatcher'
-    const backendIngestIdentity = envTrim('VITE_LIVEKIT_BACKEND_PARTICIPANT_IDENTITY') || 'aegis-link-backend'
+    const backendIngestIdentity = envTrim('VITE_LIVEKIT_BACKEND_PARTICIPANT_IDENTITY') || 'd-spatch-backend'
 
     let cancelled = false
 

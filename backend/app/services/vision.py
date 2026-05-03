@@ -49,7 +49,7 @@ def _mock_vision(seed: Optional[int] = None) -> VisionResult:
     )
 
 
-VISION_SYSTEM_PROMPT = """You are Aegis-Link Vision Triage, an AI assistant for emergency dispatch telemetry.
+VISION_SYSTEM_PROMPT = """You are D/SPATCH Vision Triage, an AI assistant for emergency dispatch telemetry.
 Your job is NOT to diagnose. Your job is to extract scene safety hazards and simple observable cues from a single image frame and produce a compact JSON object for a dispatcher dashboard.
 
 Image context: This frame comes from a bystander's **phone camera** (handheld or shirt-pocket). Expect motion blur, partial framing, glare, and uneven exposure. When in doubt, use "unknown" and lower confidence—do not invent scene details.

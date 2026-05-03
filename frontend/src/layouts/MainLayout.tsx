@@ -83,7 +83,7 @@ export function MainLayout() {
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/20 to-transparent" />
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <p className="dash-label shrink-0 tracking-[0.18em] text-[color-mix(in_srgb,var(--dash-accent)_85%,var(--dash-text-secondary))]">
-            Aegis-Link
+            D/SPATCH
           </p>
           <span className="h-3 w-px shrink-0 bg-white/15" />
           <p className="min-w-0 truncate text-sm font-semibold text-[var(--dash-text-primary)]">

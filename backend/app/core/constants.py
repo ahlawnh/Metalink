@@ -1,4 +1,4 @@
-APP_NAME = "aegis-link-backend"
+APP_NAME = "d-spatch-backend"
 API_PREFIX = "/api"
 TELEMETRY_WS_PATH = "/api/ws/telemetry"
 

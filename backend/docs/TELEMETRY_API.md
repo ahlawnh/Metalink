@@ -1,4 +1,4 @@
-# Aegis-Link backend: telemetry API (Hacker 4 contract)
+# D/SPATCH backend: telemetry API (Hacker 4 contract)
 
 This document is the integration surface for **Hacker 3 (frontend)** and **Alex / Hacker 2 (`app/services`)**.
 

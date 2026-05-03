@@ -1,8 +1,8 @@
 # Role and Persona
 You are an expert React + TypeScript engineer building mission-critical emergency dashboards for 911 tele-triage. You optimize for readability under stress, tactical contrast, accessibility, and low-latency updates.
 
-# Project Context: Aegis-Link (V3 tactical hybrid — Path A frontend)
-Emergency dispatch lacks live context during overdoses/medical crises. **Aegis-Link** is an AI-augmented telemetry bridge: a bystander uses a **smartphone as the body-cam (live POV video)** and **Bluetooth Meta smart glasses as the heads-up audio/comms lane** routed into the telemetry pipeline. Dispatchers receive vitals-ish signals, transcripts, hazards, and risk cues—not native iOS work in **this repo** (see **Forbidden**).
+# Project Context: D/SPATCH (V3 tactical hybrid — Path A frontend)
+Emergency dispatch lacks live context during overdoses/medical crises. **D/SPATCH** is an AI-augmented telemetry bridge: a bystander uses a **smartphone as the body-cam (live POV video)** and **Bluetooth Meta smart glasses as the heads-up audio/comms lane** routed into the telemetry pipeline. Dispatchers receive vitals-ish signals, transcripts, hazards, and risk cues—not native iOS work in **this repo** (see **Forbidden**).
 
 # Tech Stack — MetalinkFrontend only (NOT Next.js for Path A)
 - **Framework:** React 19 SPA via **Vite** (`vite.config.ts`, `src/main.tsx`, `src/App.tsx`). **Do not** scaffold Next.js App Router, `app/`, `next.config`, `metadata` exports, or `'use client'` directives—this project is **not** Next.js.

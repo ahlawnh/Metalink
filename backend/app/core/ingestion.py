@@ -54,9 +54,9 @@ async def run_safe_ingestion_loop(settings: Settings) -> None:
     if not settings.enable_ingestion_loop:
         return
 
-    print("Aegis-Link: ingestion loop task started (ENABLE_INGESTION_LOOP=true).")
+    print("D/SPATCH: ingestion loop task started (ENABLE_INGESTION_LOOP=true).")
     print(
-        "Aegis-Link: mock_ai=%s (MOCK_AI in process env after load_env: %r)"
+        "D/SPATCH: mock_ai=%s (MOCK_AI in process env after load_env: %r)"
         % (settings.mock_ai, os.environ.get("MOCK_AI"))
     )
 

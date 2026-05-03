@@ -6,7 +6,7 @@ What this is NOT:
 - It does not start FastAPI or LiveKit. It only exercises `app.services.transcription.deepgram_stream_from_pcm16`,
   the same function the LiveKit audio path will feed in production.
 
-Overall backend picture (Aegis-Link):
+Overall backend picture (D/SPATCH):
 1. Bystander phone PWA publishes camera + mic into a LiveKit room.
 2. `livekit_ingest.py` joins the room, samples video → `vision.py`, audio PCM → `transcription.py` (Deepgram).
 3. `telemetry_aggregate.py` merges text + vision; `broadcast.py` sends JSON to the dispatcher dashboard over WebSockets.

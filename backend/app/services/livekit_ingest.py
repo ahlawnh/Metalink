@@ -33,7 +33,7 @@ class LiveKitConfig:
     api_key: str
     api_secret: str
     room: str
-    identity: str = "aegis-link-backend"
+    identity: str = "d-spatch-backend"
     frame_sample_interval_s: float = 2.5
 
 
@@ -107,7 +107,7 @@ def _livekit_connect_debug_line(*, url: str, room: str, identity: str) -> str:
         host = url[:64] if url else "?"
     env_room_raw = (os.getenv("LIVEKIT_ROOM") or "").strip()
     if not env_room_raw:
-        room_note = "env LIVEKIT_ROOM unset (FastAPI uses default aegis-link-demo if applicable)"
+        room_note = "env LIVEKIT_ROOM unset (FastAPI uses default d-spatch-demo if applicable)"
     elif env_room_raw == room:
         room_note = "env LIVEKIT_ROOM matches cfg.room"
     else:

@@ -73,22 +73,22 @@ def test_append_transcript_segment_keeps_speaker_labels() -> None:
 
 def test_livekit_audio_identity_classification() -> None:
     assert (
-        classify_livekit_audio_participant("caller", backend_identity="aegis-link-backend")
+        classify_livekit_audio_participant("caller", backend_identity="d-spatch-backend")
         == "caller"
     )
     assert (
-        classify_livekit_audio_participant("metalink-operator-abc", backend_identity="aegis-link-backend")
+        classify_livekit_audio_participant("metalink-operator-abc", backend_identity="d-spatch-backend")
         == "dispatcher"
     )
     assert (
-        classify_livekit_audio_participant("bystander-abc123", backend_identity="aegis-link-backend")
+        classify_livekit_audio_participant("bystander-abc123", backend_identity="d-spatch-backend")
         == "caller"
     )
     assert (
-        classify_livekit_audio_participant("unknown-human", backend_identity="aegis-link-backend")
+        classify_livekit_audio_participant("unknown-human", backend_identity="d-spatch-backend")
         == "caller"
     )
     assert (
-        classify_livekit_audio_participant("aegis-link-backend", backend_identity="aegis-link-backend")
+        classify_livekit_audio_participant("d-spatch-backend", backend_identity="d-spatch-backend")
         is None
     )

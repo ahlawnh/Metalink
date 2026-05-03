@@ -1,4 +1,4 @@
-# Aegis-Link backend
+# D/SPATCH backend
 
 Python **FastAPI** service: LiveKit ingestion, vision + transcription (Hacker 2), WebSocket telemetry (Hacker 4).
 
