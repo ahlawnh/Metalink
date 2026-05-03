@@ -104,18 +104,20 @@ async def run_ingestion_loop(
         return
 
     # Optional dependency: keep isolated so mock mode works without LiveKit.
+    # RTC lives in `livekit`; AccessToken/VideoGrants live in `livekit-api` (`from livekit import api`).
     try:
+        from livekit import api  # type: ignore
         from livekit import rtc  # type: ignore
-        from livekit.api import AccessToken, VideoGrants  # type: ignore
     except Exception as e:  # pragma: no cover
         raise RuntimeError(
-            "LiveKit SDK not installed. Either set MOCK_AI=true or install livekit."
+            "LiveKit packages missing or failed to import. Install `livekit` and `livekit-api`, "
+            "or set MOCK_AI=true to skip LiveKit."
         ) from e
 
     token = (
-        AccessToken(cfg.api_key, cfg.api_secret)
+        api.AccessToken(cfg.api_key, cfg.api_secret)
         .with_identity(cfg.identity)
-        .with_grants(VideoGrants(room_join=True, room=cfg.room))
+        .with_grants(api.VideoGrants(room_join=True, room=cfg.room))
         .to_jwt()
     )
 
