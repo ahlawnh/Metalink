@@ -13,6 +13,7 @@ from app.services.telemetry_aggregate import (
     TelemetryState,
     append_transcript_segment,
     gate_hazards,
+    patch_transcript_segment,
     patch_segment_translation,
     publish_telemetry,
     publish_transcript_event,
@@ -496,26 +497,42 @@ async def _transcript_loop_from_livekit_track(
         finally:
             await astream.aclose()
 
+    active_segment_id: str | None = None
+
     async for tchunk in deepgram_stream_from_pcm16(pcm16_mono_16khz=pcm_iter()):
         if state.transcript_ingest_paused:
             continue
         if not isinstance(tchunk, TranscriptChunk):
             continue
         if tchunk.text:
-            # Append immediately so the dispatcher sees words with zero added latency.
-            append_transcript_segment(
-                state,
-                speaker=speaker_role,
-                text=tchunk.text,
-                timestamp=tchunk.timestamp,
-                is_final=tchunk.is_final,
-                confidence=tchunk.confidence,
-            )
+            # Deepgram yields interim updates; keep a single active segment and patch it in-place
+            # so the UI doesn't spam duplicate bubbles while someone is speaking.
+            if active_segment_id:
+                patched = patch_transcript_segment(
+                    state,
+                    segment_id=active_segment_id,
+                    text=tchunk.text,
+                    is_final=tchunk.is_final,
+                    confidence=tchunk.confidence,
+                    timestamp=tchunk.timestamp,
+                )
+                if not patched:
+                    active_segment_id = None
+
+            if not active_segment_id:
+                append_transcript_segment(
+                    state,
+                    speaker=speaker_role,
+                    text=tchunk.text,
+                    timestamp=tchunk.timestamp,
+                    is_final=tchunk.is_final,
+                    confidence=tchunk.confidence,
+                )
+                active_segment_id = state.transcript_segments[-1].get("segment_id") if state.transcript_segments else None
 
             # For final chunks, kick off translation as a background task — no blocking.
             if tchunk.is_final:
-                # Grab the id of the segment we just appended.
-                seg_id = state.transcript_segments[-1].get("segment_id") if state.transcript_segments else None
+                seg_id = active_segment_id
                 raw_text = tchunk.text
 
                 async def _translate_and_patch(sid: str | None, text: str) -> None:
@@ -537,6 +554,9 @@ async def _transcript_loop_from_livekit_track(
                         print(f"[translator] background task failed: {exc}", flush=True)
 
                 asyncio.create_task(_translate_and_patch(seg_id, raw_text))
+
+                # Final chunk closes out the active segment.
+                active_segment_id = None
 
         if speaker_role == "caller":
             record_transcript_side_effects(state, text=tchunk.text, is_final=tchunk.is_final)
