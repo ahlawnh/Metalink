@@ -3,10 +3,39 @@ import { AccessToken } from "livekit-server-sdk";
 export const dynamic = "force-dynamic";
 
 /**
- * Mints a short-lived publisher token. Secrets stay server-side only.
- * Query: room (optional), identity (optional)
+ * Prefer forwarding to FastAPI (`BACKEND_INTERNAL_URL`) so LiveKit secrets stay only on the backend.
+ * Fallback: mint here using LIVEKIT_* if no backend URL is set (local-only dev).
  */
 export async function GET(request) {
+  const backendRaw =
+    process.env.BACKEND_INTERNAL_URL?.trim() ||
+    process.env.LIVEKIT_TOKEN_BACKEND_URL?.trim() ||
+    "";
+
+  if (backendRaw) {
+    const backend = backendRaw.replace(/\/+$/, "");
+    const incoming = new URL(request.url);
+    const target = new URL(`${backend}/api/livekit/token`);
+    incoming.searchParams.forEach((v, k) => target.searchParams.set(k, v));
+    let upstream;
+    try {
+      upstream = await fetch(target.toString(), { cache: "no-store" });
+    } catch {
+      return Response.json(
+        { detail: "Could not reach FastAPI backend for LiveKit token." },
+        { status: 502 }
+      );
+    }
+    const text = await upstream.text();
+    return new Response(text, {
+      status: upstream.status,
+      headers: {
+        "Content-Type":
+          upstream.headers.get("Content-Type") || "application/json",
+      },
+    });
+  }
+
   const apiKey = process.env.LIVEKIT_API_KEY;
   const apiSecret = process.env.LIVEKIT_API_SECRET;
   const defaultRoom =
@@ -15,14 +44,20 @@ export async function GET(request) {
 
   if (!apiKey || !apiSecret) {
     return Response.json(
-      { error: "Missing LIVEKIT_API_KEY or LIVEKIT_API_SECRET on the server." },
+      {
+        detail:
+          "Set BACKEND_INTERNAL_URL to your FastAPI base (e.g. http://127.0.0.1:8000), or configure LIVEKIT_API_KEY / LIVEKIT_API_SECRET on Next.js.",
+      },
       { status: 500 }
     );
   }
 
   if (!url) {
     return Response.json(
-      { error: "Missing NEXT_PUBLIC_LIVEKIT_URL (LiveKit websocket URL)." },
+      {
+        detail:
+          "Missing NEXT_PUBLIC_LIVEKIT_URL for local Next token fallback.",
+      },
       { status: 500 }
     );
   }
@@ -32,7 +67,7 @@ export async function GET(request) {
   if (!room) {
     return Response.json(
       {
-        error:
+        detail:
           "No room configured. Set LIVEKIT_ROOM or NEXT_PUBLIC_LIVEKIT_ROOM, or pass ?room=",
       },
       { status: 400 }

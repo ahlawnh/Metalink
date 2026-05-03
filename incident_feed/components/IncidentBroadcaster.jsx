@@ -1,10 +1,11 @@
 "use client";
 
-import { LiveKitRoom, VideoConference } from "@livekit/components-react";
+import { LiveKitRoom } from "@livekit/components-react";
 import "@livekit/components-styles";
+import FaceTimeCallLayout from "@/components/FaceTimeCallLayout";
 
 /**
- * When LiveKit credentials are valid: publishes camera + mic for backend ingest.
+ * Publishes camera + mic for ingest; FaceTime-style UI (solo fullscreen / PiP when remote has video).
  */
 export default function IncidentBroadcaster({ token, serverUrl }) {
   const ready = Boolean(token && serverUrl);
@@ -26,12 +27,15 @@ export default function IncidentBroadcaster({ token, serverUrl }) {
             facingMode: "environment",
           },
         }}
-        className="flex flex-col gap-2 p-3 sm:p-4"
+        className="flex flex-col gap-1 p-3 sm:p-4"
         onError={(err) => console.error("[LiveKit]", err)}
       >
-        <div className="relative min-h-[min(52vh,420px)] overflow-hidden rounded-xl bg-neutral-950 [&_.lk-video-conference]:min-h-[min(48vh,380px)] [&_.lk-video-conference]:h-full [&_.lk-video-conference-inner]:min-h-[inherit]">
-          <VideoConference />
-        </div>
+        <p className="px-0.5 text-center text-[11px] text-neutral-500">
+          {ready
+            ? "You fill the screen until dispatch joins with video — then they’re full screen and you move to the corner."
+            : null}
+        </p>
+        <FaceTimeCallLayout />
       </LiveKitRoom>
     </div>
   );

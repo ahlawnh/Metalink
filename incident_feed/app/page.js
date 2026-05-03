@@ -9,6 +9,48 @@ const IncidentBroadcaster = dynamic(
   { ssr: false }
 );
 
+/** Supports FastAPI `{ detail: string | [...] | object }` and `{ error }`. */
+function apiFailureDetail(data) {
+  if (!data || typeof data !== "object") return null;
+  if (typeof data.error === "string") return data.error;
+  const d = data.detail;
+  if (typeof d === "string") return d;
+  if (Array.isArray(d)) {
+    return d
+      .map((item) =>
+        item && typeof item === "object" && "msg" in item
+          ? String(item.msg)
+          : String(item)
+      )
+      .filter(Boolean)
+      .join(" ");
+  }
+  if (d && typeof d === "object") {
+    if ("message" in d && typeof d.message === "string") return d.message;
+  }
+  return null;
+}
+
+function relayFailureMessage(status, rawBody, parsed) {
+  const fromApi = apiFailureDetail(parsed);
+  if (fromApi) return fromApi;
+  if (status === 502) {
+    return "Could not reach the FastAPI backend. Start it on port 8000 and set BACKEND_INTERNAL_URL in incident_feed/.env.local.";
+  }
+  if (status === 503) {
+    return "Backend refused LiveKit token (often LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET missing in backend/.env).";
+  }
+  const trimmed = typeof rawBody === "string" ? rawBody.trim() : "";
+  if (trimmed.startsWith("<") || trimmed.startsWith("<!")) {
+    return `Token endpoint returned HTML (${status}), not JSON — check BACKEND_INTERNAL_URL and backend URL.`;
+  }
+  if (trimmed.length > 0 && trimmed.length < 220) return trimmed;
+  if (!parsed || typeof parsed !== "object") {
+    return `Token response was not valid JSON (${status}).`;
+  }
+  return `Token request failed (${status}).`;
+}
+
 export default function HomePage() {
   const [phase, setPhase] = useState(
     /** @type {'idle' | 'preview' | 'relay'} */ ("idle")
@@ -44,19 +86,33 @@ export default function HomePage() {
 
   const tryRelayToken = useCallback(async () => {
     const res = await fetch("/api/livekit/token");
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.token || !data.url) {
+    const rawBody = await res.text();
+    let data = {};
+    try {
+      data = rawBody ? JSON.parse(rawBody) : {};
+    } catch {
+      data = {};
+    }
+
+    const okPayload =
+      res.ok &&
+      typeof data.token === "string" &&
+      data.token.length > 0 &&
+      typeof data.url === "string" &&
+      data.url.trim().length > 0;
+
+    if (!okPayload) {
+      const core = relayFailureMessage(res.status, rawBody, data);
       setRelayNotice(
-        typeof data.error === "string"
-          ? data.error
-          : "Dispatch link not ready yet — your camera is still working on this device."
+        `${core} Your camera preview on this device still works — Try again after fixing env or restarting servers.`
       );
       return null;
     }
+
     setRelayNotice(null);
     return {
       token: data.token,
-      serverUrl: data.url,
+      serverUrl: data.url.trim(),
       room: data.room,
       identity: data.identity,
     };
