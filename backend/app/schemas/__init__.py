@@ -17,6 +17,7 @@ from app.schemas.telemetry import (
     RespRateEstimate,
     RollingSummaryPayload,
     SCHEMA_VERSION,
+    TranscriptSegment,
     TelemetryUpdate,
     WebSocketEvent,
 )
@@ -40,6 +41,7 @@ __all__ = [
     "RespRateEstimate",
     "RollingSummaryPayload",
     "SCHEMA_VERSION",
+    "TranscriptSegment",
     "TelemetryUpdate",
     "WebSocketEvent",
 ]

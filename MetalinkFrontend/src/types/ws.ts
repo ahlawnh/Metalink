@@ -42,6 +42,14 @@ export interface BackendCallerLocationSnapshot {
   updated_at?: string
 }
 
+export interface BackendTranscriptSegment {
+  speaker: 'caller' | 'dispatcher'
+  text: string
+  timestamp: string
+  is_final?: boolean
+  confidence?: number
+}
+
 export interface BackendTelemetryUpdatePayload {
   timestamp?: string
   scene_hazards: BackendDetectedItem[]
@@ -51,6 +59,7 @@ export interface BackendTelemetryUpdatePayload {
   resp_rate_estimate: BackendRespRateEstimate
   consciousness_level: string
   transcript_snippet: string
+  transcript_segments?: BackendTranscriptSegment[]
   pipeline_status: 'mock' | 'degraded' | 'live'
   critical_alerts: BackendCriticalAlert[]
   /** When present, replaces dashboard caller map pin (e.g. after `request.caller_location`). */

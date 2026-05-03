@@ -19,6 +19,7 @@ from app.schemas.telemetry import (
     RespirationMethod,
     RespRateEstimate,
     TelemetryUpdate,
+    TranscriptSegment,
 )
 
 
@@ -114,6 +115,28 @@ def _optional_haptic_cue(raw: Any) -> Optional[HapticCue]:
         return None
 
 
+def _transcript_segments(raw: Any) -> list[TranscriptSegment]:
+    if not isinstance(raw, list):
+        return []
+    segments: list[TranscriptSegment] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        try:
+            segments.append(
+                TranscriptSegment(
+                    speaker=item.get("speaker"),
+                    text=str(item.get("text") or "").strip(),
+                    timestamp=item.get("timestamp"),
+                    is_final=bool(item.get("is_final", True)),
+                    confidence=_confidence(item.get("confidence"), default=0.0),
+                )
+            )
+        except Exception:
+            continue
+    return segments
+
+
 def telemetry_from_service_payload(payload: dict[str, Any]) -> TelemetryUpdate:
     vitals = payload.get("vitals") if isinstance(payload.get("vitals"), dict) else {}
     hazards = payload.get("hazards") if isinstance(payload.get("hazards"), list) else []
@@ -153,6 +176,7 @@ def telemetry_from_service_payload(payload: dict[str, Any]) -> TelemetryUpdate:
         ),
         consciousness_level=_map_consciousness(payload.get("patient_status"), transcript),
         transcript_snippet=transcript,
+        transcript_segments=_transcript_segments(payload.get("transcript_segments")),
         rolling_summary=str(payload.get("rolling_summary") or ""),
         pipeline_status=_pipeline_status(),
         critical_alerts=critical_alerts,

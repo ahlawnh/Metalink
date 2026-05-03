@@ -2,6 +2,7 @@ import type {
   BackendCriticalAlert,
   BackendTelemetryUpdatePayload,
   BackendDetectedItem,
+  BackendTranscriptSegment,
 } from '@/types/ws'
 import type {
   DashboardTelemetryPayload,
@@ -75,6 +76,17 @@ function snippetToTranscript(snippet: string, timestamp: string): TranscriptChun
   ]
 }
 
+function segmentsToTranscript(segments: BackendTranscriptSegment[]): TranscriptChunk[] {
+  return segments
+    .filter((segment) => segment.text.trim().length > 0)
+    .map((segment, index) => ({
+      id: `tx-${segment.speaker}-${hashId(segment.text)}-${hashId(segment.timestamp)}-${index}`,
+      speaker: segment.speaker,
+      text: segment.text.trim(),
+      timestamp: segment.timestamp,
+    }))
+}
+
 function pipelineToVideoStatus(
   pipeline: BackendTelemetryUpdatePayload['pipeline_status'],
 ): DashboardTelemetryPayload['video']['streamStatus'] {
@@ -112,13 +124,22 @@ export function applyTelemetryUpdate(
     resp_rate_estimate: payload.resp_rate_estimate ?? { value: null, method: 'unknown', confidence: 0 },
     consciousness_level: payload.consciousness_level ?? 'unknown',
     transcript_snippet: payload.transcript_snippet ?? '',
+    transcript_segments: payload.transcript_segments,
     pipeline_status: pipelineStatus,
     critical_alerts: payload.critical_alerts ?? [],
   }
   const respiratoryStatus = deriveRespiratoryStatus(fullPayload)
 
+  const segmentChunks = Array.isArray(payload.transcript_segments)
+    ? segmentsToTranscript(payload.transcript_segments)
+    : []
   const snippetChunks = snippetToTranscript(fullPayload.transcript_snippet, now)
-  const transcript = snippetChunks.length > 0 ? snippetChunks : previous.transcript
+  const transcript =
+    segmentChunks.length > 0
+      ? segmentChunks
+      : snippetChunks.length > 0
+        ? snippetChunks
+        : previous.transcript
 
   const loc = payload.caller_location
   const caller_location =

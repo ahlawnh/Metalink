@@ -74,6 +74,7 @@ All frames are JSON objects:
 | `resp_rate_estimate` | `{ "value"?, "method", "confidence" }` | |
 | `consciousness_level` | enum | `responsive`, `unresponsive`, `unknown` |
 | `transcript_snippet` | string | Truncated rolling transcript |
+| `transcript_segments` | array | Optional speaker-labeled transcript segments: `{ "speaker": "caller"|"dispatcher", "text", "timestamp", "is_final", "confidence" }` |
 | `rolling_summary` | string | Often empty on push **`telemetry.update`** frames; use **`telemetry.summary_updated`** after sending **`request.summary`** for GPT-5.4-mini summary text |
 | `pipeline_status` | enum | `mock`, `degraded`, `live` |
 | `critical_alerts` | array of CriticalAlert | |
@@ -95,6 +96,7 @@ High-frequency telemetry from services is **debounced** before broadcast. Only t
 | `MOCK_AI` | Backend + services | `true`: no paid API calls; mock vision/transcript paths |
 | `ENABLE_INGESTION_LOOP` | `app/main.py` | Start LiveKit/mock ingestion task |
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `LIVEKIT_ROOM`, `LIVEKIT_IDENTITY` | `app/services/livekit_ingest.py` | Live room join |
+| `LIVEKIT_CALLER_IDENTITY`, `LIVEKIT_DISPATCHER_IDENTITY_PREFIX` | `app/services/livekit_ingest.py` | Classify LiveKit audio tracks for dual-end transcription |
 | `OPENAI_API_KEY` | `app/services/vision.py` | When `MOCK_AI=false` |
 | `DEEPGRAM_API_KEY` | `app/services/transcription.py` | When `MOCK_AI=false` |
 | `CORS_ORIGINS` | `app/main.py` | Comma-separated browser origins |
@@ -115,9 +117,12 @@ Never commit `.env`. Use `.env.example` as a template.
 
 **Bystander stress:** When the rolling transcript matches panic heuristics, `build_telemetry_payload()` may set **`bystander_stress`** (`critical_panic` or `elevated_distress`) for the broadcaster.
 
+**Dual-end STT:** In live mode, the backend can transcribe both caller and dispatcher LiveKit audio tracks. The dispatcher dashboard publishes microphone audio after browser permission; ingestion classifies `caller` as caller speech and identities beginning with `metalink-operator` as dispatcher speech by default. This opens one Deepgram stream per speaker, so live dual transcription roughly doubles STT usage compared with caller-only transcription.
+
 ### Optional `dict` keys (mapped in `broadcast.py`)
 
 - `bystander_stress`: `{ "score", "label"?, "confidence"? }`
+- `transcript_segments`: `[{ "speaker": "caller"|"dispatcher", "text", "timestamp", "is_final"?, "confidence"? }]`
 - `heart_rate_rppg`: `{ "value"?, "confidence"?, "disclaimer"? }`
 - `agonal_breathing`: `{ "suspected", "confidence" }`  
   Or legacy: `agonal_breathing_suspected` (bool) + `agonal_breathing_confidence` (float)
