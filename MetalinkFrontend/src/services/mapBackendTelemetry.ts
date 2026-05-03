@@ -130,6 +130,26 @@ function pipelineToVideoStatus(
   return 'connected'
 }
 
+function mergeHapticCue(
+  previous: DashboardTelemetryPayload['haptic_cue'],
+  rawPayload: unknown,
+): DashboardTelemetryPayload['haptic_cue'] {
+  const envelope = rawPayload as Record<string, unknown>
+  if (!('haptic_cue' in envelope)) {
+    return previous
+  }
+  const hc = envelope.haptic_cue as BackendHapticCue | null | undefined
+  if (hc && typeof hc === 'object' && hc.active === true && hc.pattern === 'cpr_metronome') {
+    const rawBpm = hc.bpm
+    const bpm =
+      typeof rawBpm === 'number' && Number.isFinite(rawBpm)
+        ? Math.min(140, Math.max(60, Math.round(rawBpm)))
+        : 110
+    return { active: true, pattern: 'cpr_metronome', bpm }
+  }
+  return { active: false, pattern: 'none', bpm: null }
+}
+
 /** Merge a backend telemetry snapshot into the dashboard contract; keeps session from previous. */
 export function applyTelemetryUpdate(
   previous: DashboardTelemetryPayload,
@@ -238,6 +258,8 @@ export function applyTelemetryUpdate(
         }
       : previous.patient_heart
 
+  const haptic_cue = mergeHapticCue(previous.haptic_cue, rawPayload)
+
   let cpr_guidance = previous.cpr_guidance
   if (payload.haptic_cue !== undefined && payload.haptic_cue !== null) {
     const hc = payload.haptic_cue as BackendHapticCue
@@ -261,6 +283,7 @@ export function applyTelemetryUpdate(
     caller_location,
     patient_heart,
     cpr_guidance,
+    haptic_cue,
     transcript_ai_summary: payload.clear_transcript
       ? { status: 'idle', text: null, updated_at: now }
       : previous.transcript_ai_summary,

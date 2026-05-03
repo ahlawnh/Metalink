@@ -182,7 +182,7 @@ async def telemetry_websocket(websocket: WebSocket, scenario: Optional[str] = No
                     ),
                 )
             elif isinstance(data, dict) and data.get("event_type") == "dispatcher.cpr_guidance":
-                # Dispatcher workstation: CPR compression tempo (100–120 BPM) for caller / PWA via `haptic_cue`.
+                # Vitals panel: CPR tempo strictly 100–120 BPM.
                 active = bool(data.get("active"))
                 raw_bpm = data.get("bpm")
                 haptic: HapticCue
@@ -200,6 +200,27 @@ async def telemetry_websocket(websocket: WebSocket, scenario: Optional[str] = No
                     WebSocketEvent(
                         event_type=EventType.TELEMETRY_UPDATE,
                         payload=TelemetryUpdate(pipeline_status=pipeline_status, haptic_cue=haptic),
+                    ),
+                )
+            elif isinstance(data, dict) and data.get("event_type") == "request.dispatch_cpr":
+                # Metronome panel: fan-out CPR cue (60–140 BPM) to every telemetry client.
+                active = bool(data.get("active", True))
+                if active:
+                    try:
+                        bpm = int(data.get("bpm", 110))
+                    except (TypeError, ValueError):
+                        bpm = 110
+                    bpm = max(60, min(140, bpm))
+                    cue = HapticCue(active=True, pattern="cpr_metronome", bpm=bpm)
+                else:
+                    cue = HapticCue(active=False, pattern="none", bpm=None)
+                await telemetry_manager.broadcast(
+                    WebSocketEvent(
+                        event_type=EventType.TELEMETRY_UPDATE,
+                        payload=TelemetryUpdate(
+                            pipeline_status=PipelineStatus.LIVE,
+                            haptic_cue=cue,
+                        ),
                     ),
                 )
     except WebSocketDisconnect:

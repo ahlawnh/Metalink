@@ -86,9 +86,16 @@ export interface CallerLocationTelemetry {
   updated_at?: string
 }
 
-/** Dispatcher-driven CPR compression metronome (100–120 BPM), echoed via WS `haptic_cue` for the caller PWA. */
+/** Dispatcher-driven CPR compression metronome (100–120 BPM) for the vitals card; echoed via WS `haptic_cue`. */
 export interface CprGuidanceTelemetry {
   active: boolean
+  bpm: number | null
+}
+
+/** Dispatcher-issued cue for bystander PWA (CPR compression cadence via vibration). */
+export interface HapticCueTelemetry {
+  active: boolean
+  pattern: 'none' | 'cpr_metronome'
   bpm: number | null
 }
 
@@ -104,6 +111,8 @@ export interface DashboardTelemetryPayload {
   operator: OperatorTelemetry
   caller_location: CallerLocationTelemetry
   patient_heart: PatientHeartTelemetry
-  /** Mirrors backend `TelemetryUpdate.haptic_cue` when pattern is `cpr_metronome`. */
+  /** Vitals HR panel: active only when backend BPM is in the 100–120 dispatcher band. */
   cpr_guidance: CprGuidanceTelemetry
+  /** Full `haptic_cue` shape for metronome panel / parity with backend (60–140 BPM when active). */
+  haptic_cue: HapticCueTelemetry
 }

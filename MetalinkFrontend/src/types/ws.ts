@@ -83,6 +83,7 @@ export interface BackendTelemetryUpdatePayload {
   heart_rate_rppg?: BackendHeartRateRppg | null
   /** When true, dispatcher clears call transcript and AI summary (bystander ended session). */
   clear_transcript?: boolean
+  /** Bystander PWA vibration / CPR cadence; only merge when this key is present on the wire. */
   haptic_cue?: BackendHapticCue | null
 }
 

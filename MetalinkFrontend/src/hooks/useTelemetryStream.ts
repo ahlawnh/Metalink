@@ -59,6 +59,10 @@ export function useTelemetryStream(): {
   requestCallerLocationRefresh: () => void
   /** Broadcast CPR compression tempo (100–120 BPM) to all telemetry subscribers via `haptic_cue` / caller PWA. */
   setCprGuidance: (active: boolean, bpm: number | null) => void
+  /** Broadcast CPR metronome cue to all telemetry clients (bystander PWA vibrates at `bpm`). */
+  sendDispatchCpr: (bpm: number) => void
+  /** Stop CPR metronome cue on all clients. */
+  sendStopDispatchCpr: () => void
 } {
   const initial = useMemo(() => normalizeTelemetryPayload(fallbackTelemetry), [])
   const [telemetry, setTelemetry] = useState<DashboardTelemetryPayload>(initial)
@@ -93,6 +97,19 @@ export function useTelemetryStream(): {
         bpm: active && typeof bpm === 'number' ? bpm : null,
       }),
     )
+  }, [])
+
+  const sendDispatchCpr = useCallback((bpm: number) => {
+    const socket = socketRef.current
+    if (!socket || socket.readyState !== WebSocket.OPEN) return
+    const clamped = Math.min(140, Math.max(60, Math.round(Number(bpm) || 110)))
+    socket.send(JSON.stringify({ event_type: 'request.dispatch_cpr', active: true, bpm: clamped }))
+  }, [])
+
+  const sendStopDispatchCpr = useCallback(() => {
+    const socket = socketRef.current
+    if (!socket || socket.readyState !== WebSocket.OPEN) return
+    socket.send(JSON.stringify({ event_type: 'request.dispatch_cpr', active: false }))
   }, [])
 
   const subscribeRollingSummary = useCallback((fn: (text: string) => void) => {
@@ -274,5 +291,7 @@ export function useTelemetryStream(): {
     subscribeRollingSummary,
     requestCallerLocationRefresh,
     setCprGuidance,
+    sendDispatchCpr,
+    sendStopDispatchCpr,
   }
 }

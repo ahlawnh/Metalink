@@ -41,6 +41,22 @@ The client may send JSON frames (no envelope required) to request a fresh GPT ro
 
 The server responds with **`telemetry.summary_updated`** (see below). Summary generation runs in a background task so the WebSocket keepalive / receive loop is not blocked by the OpenAI call.
 
+### Client → server (CPR metronome for bystander PWA)
+
+The dispatcher dashboard may broadcast a compression cadence to **every** connected telemetry client (dashboard + incident_feed). The server emits **`telemetry.update`** with **`haptic_cue`** only (other fields use defaults); PWAs should only apply **`haptic_cue`** when that key is present on the payload.
+
+**Start** (BPM clamped to 60–140 on the server):
+
+```json
+{ "event_type": "request.dispatch_cpr", "active": true, "bpm": 110 }
+```
+
+**Stop:**
+
+```json
+{ "event_type": "request.dispatch_cpr", "active": false }
+```
+
 ### Envelope (every WebSocket message)
 
 All frames are JSON objects:
