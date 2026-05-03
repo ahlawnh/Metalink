@@ -191,55 +191,80 @@ export default function TranscriptSummary({
 
   const primaryLabel = summaryText ? 'Refresh transcript summary' : 'Generate AI Summary'
 
+  const [summaryOpen, setSummaryOpen] = useState(false)
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <div className="shrink-0">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      {/* Collapsible AI summary disclosure */}
+      <div className="shrink-0 overflow-hidden rounded-lg border border-white/[0.07] bg-white/[0.02]">
         <button
           type="button"
-          onClick={onGenerateClick}
-          disabled={!wsConnected || isGenerating}
-          title={wsConnected ? undefined : 'Connect to telemetry service to request a summary'}
-          className="group relative w-full overflow-hidden rounded-lg border border-cyan-300/25 bg-white/[0.05] px-4 py-3 text-center text-sm font-bold tracking-[0.08em] text-cyan-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_12px_32px_rgba(0,229,255,0.08)] transition-all duration-200 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-cyan-200/70 before:to-transparent hover:border-cyan-200/55 hover:bg-white/[0.075] hover:text-white hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_16px_44px_rgba(0,229,255,0.18)] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200/70 disabled:cursor-not-allowed disabled:opacity-45"
+          onClick={() => setSummaryOpen((o) => !o)}
+          className="flex w-full items-center justify-between px-3 py-2.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50"
+          aria-expanded={summaryOpen}
         >
-          {isGenerating ? 'Working…' : primaryLabel}
+          <span className="flex items-center gap-2">
+            <span className="dash-label tracking-[0.14em]">AI Summary</span>
+            {summaryText && !summaryOpen ? (
+              <span className="rounded-full border border-cyan-400/30 bg-[color-mix(in_srgb,var(--dash-accent)_10%,transparent)] px-1.5 py-0.5 font-data text-[9px] font-semibold uppercase tracking-[0.1em] text-cyan-300/80">
+                ready
+              </span>
+            ) : isGenerating ? (
+              <span className="font-data text-[9px] font-semibold uppercase tracking-[0.1em] text-[var(--dash-text-secondary)] motion-safe:animate-pulse">
+                generating…
+              </span>
+            ) : null}
+          </span>
+          <span className="font-data text-[11px] text-[var(--dash-text-secondary)]" aria-hidden>
+            {summaryOpen ? '▲' : '▼'}
+          </span>
         </button>
-      </div>
 
-      {isGenerating || summaryText !== null || errorText !== null ? (
-        <section className="shrink-0" aria-live="polite" data-summary-requested={isSummaryRequested ? 'true' : 'false'}>
-          {isGenerating && !summaryText ? <SummaryLoadingPanel /> : null}
-          {!isGenerating && errorText ? (
-            <div className="relative min-h-[7.5rem] overflow-hidden rounded-lg border border-red-400/25 bg-[color-mix(in_srgb,#FF52520e%,rgba(0,0,0,0.4))] p-4 shadow-[inset_0_1px_0_rgba(255,82,82,0.1)]">
-              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-red-400/50 to-transparent" />
-              <p className="text-sm leading-relaxed text-[#FFAB91]">{errorText}</p>
-              <button
-                type="button"
-                onClick={onTryAgainAfterError}
-                className="relative mt-4 overflow-hidden rounded-md border border-white/[0.09] bg-white/[0.04] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#E0E0E0] shadow-[inset_0_1px_0_rgba(255,255,255,0.07)] transition-all hover:bg-white/[0.07] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"
-              >
-                Try again
-              </button>
-            </div>
-          ) : null}
-          {summaryText !== null && !errorText ? (
-            <div
-              className={cn(
-                'relative min-h-[7.5rem] overflow-hidden rounded-lg border border-white/[0.07] bg-white/[0.02] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-sm',
-                isGenerating && 'opacity-55',
-              )}
+        {summaryOpen ? (
+          <div className="border-t border-white/[0.06] px-3 pb-3 pt-2" aria-live="polite" data-summary-requested={isSummaryRequested ? 'true' : 'false'}>
+            <button
+              type="button"
+              onClick={onGenerateClick}
+              disabled={!wsConnected || isGenerating}
+              title={wsConnected ? undefined : 'Connect to telemetry service to request a summary'}
+              className="group relative mb-3 w-full overflow-hidden rounded-lg border border-cyan-300/25 bg-white/[0.05] px-4 py-2.5 text-center text-sm font-bold tracking-[0.08em] text-cyan-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_12px_32px_rgba(0,229,255,0.08)] transition-all duration-200 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-cyan-200/70 before:to-transparent hover:border-cyan-200/55 hover:bg-white/[0.075] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200/70 disabled:cursor-not-allowed disabled:opacity-45"
             >
-              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/25 to-transparent" />
-              {isGenerating ? (
-                <p className="mb-3 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dash-text-secondary)] motion-safe:animate-pulse">
-                  Refreshing summary from live transcript…
-                </p>
-              ) : null}
-              <p className="dash-label mb-2 tracking-[0.14em]">AI transcript summary</p>
-              <p className="font-sans text-sm font-normal leading-relaxed tracking-normal text-[#E0E0E0]">{summaryText}</p>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
+              {isGenerating ? 'Working…' : primaryLabel}
+            </button>
+
+            {isGenerating && !summaryText ? <SummaryLoadingPanel /> : null}
+            {!isGenerating && errorText ? (
+              <div className="relative overflow-hidden rounded-lg border border-red-400/25 bg-[color-mix(in_srgb,#FF52520e%,rgba(0,0,0,0.4))] p-4 shadow-[inset_0_1px_0_rgba(255,82,82,0.1)]">
+                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-red-400/50 to-transparent" />
+                <p className="text-sm leading-relaxed text-[#FFAB91]">{errorText}</p>
+                <button
+                  type="button"
+                  onClick={onTryAgainAfterError}
+                  className="relative mt-4 overflow-hidden rounded-md border border-white/[0.09] bg-white/[0.04] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#E0E0E0] shadow-[inset_0_1px_0_rgba(255,255,255,0.07)] transition-all hover:bg-white/[0.07] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"
+                >
+                  Try again
+                </button>
+              </div>
+            ) : null}
+            {summaryText !== null && !errorText ? (
+              <div
+                className={cn(
+                  'relative overflow-hidden rounded-lg border border-white/[0.07] bg-white/[0.02] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-sm',
+                  isGenerating && 'opacity-55',
+                )}
+              >
+                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/25 to-transparent" />
+                {isGenerating ? (
+                  <p className="mb-3 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dash-text-secondary)] motion-safe:animate-pulse">
+                    Refreshing summary from live transcript…
+                  </p>
+                ) : null}
+                <p className="font-sans text-sm font-normal leading-relaxed tracking-normal text-[#E0E0E0]">{summaryText}</p>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
 
       <section
         className="dash-card flex max-h-[min(34rem,60svh)] min-h-0 flex-1 flex-col overflow-hidden"

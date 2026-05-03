@@ -271,7 +271,14 @@ export default function VitalsTelemetryCards({
     <div className="flex w-full flex-col gap-3">
       <section className={telemetrySurface} aria-label="Patient heart rate">
         <div className="flex flex-wrap items-start justify-between gap-2 px-1 pb-1">
-          <p className="dash-label shrink-0">Heart rate</p>
+          <div className="flex items-center gap-2">
+            <p className="dash-label shrink-0">Heart rate</p>
+            {patient.signal_source === 'rppg' && hrPresent ? (
+              <span className="rounded-full border border-amber-400/35 bg-amber-950/40 px-1.5 py-0.5 font-data text-[8px] font-semibold uppercase tracking-[0.1em] text-amber-300/80">
+                Camera est.
+              </span>
+            ) : null}
+          </div>
           <CprTempoControl cprGuidance={cprGuidance} onCprGuidance={onCprGuidance} wsConnected={wsConnected} />
         </div>
         <div className="rounded-lg px-1 pt-1">
@@ -311,6 +318,11 @@ export default function VitalsTelemetryCards({
               </svg>
             ) : null}
           </div>
+          {patient.signal_source === 'rppg' && hrPresent ? (
+            <p className="mt-1 px-1 font-data text-[10px] leading-snug text-[var(--dash-text-secondary)] opacity-75">
+              Experimental camera-derived estimate · not a medical device
+            </p>
+          ) : null}
         </div>
       </section>
 

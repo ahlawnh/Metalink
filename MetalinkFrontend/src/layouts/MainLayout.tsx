@@ -1,3 +1,4 @@
+import { useCallback, useRef, useState } from 'react'
 import CallerLocationMapPanel from '@/components/dashboard/CallerLocationMapPanel'
 import DeployVideoCallPanel from '@/components/dashboard/DeployVideoCallPanel'
 import HazardList from '@/components/dashboard/HazardList'
@@ -7,6 +8,11 @@ import TranscriptSummary from '@/components/dashboard/TranscriptSummary'
 import VideoPlayer from '@/components/dashboard/VideoPlayer'
 import { useTelemetryStream } from '@/hooks/useTelemetryStream'
 import { cn } from '@/lib/utils'
+
+const LEFT_DEFAULT = 320
+const RIGHT_DEFAULT = 320
+const SIDE_MIN = 200
+const SIDE_MAX = 600
 
 export function MainLayout() {
   const {
@@ -41,6 +47,35 @@ export function MainLayout() {
         : 'bg-[#FF5252]'
 
   const criticalCount = telemetry.hazards.filter((hazard) => hazard.severity === 'critical').length
+
+  const [leftWidth, setLeftWidth] = useState(LEFT_DEFAULT)
+  const [rightWidth, setRightWidth] = useState(RIGHT_DEFAULT)
+  const draggingRef = useRef<'left' | 'right' | null>(null)
+  const startXRef = useRef(0)
+  const startWidthRef = useRef(0)
+
+  const onHandleMouseDown = useCallback((side: 'left' | 'right', e: React.MouseEvent) => {
+    e.preventDefault()
+    draggingRef.current = side
+    startXRef.current = e.clientX
+    startWidthRef.current = side === 'left' ? leftWidth : rightWidth
+
+    const onMove = (ev: MouseEvent) => {
+      const delta = ev.clientX - startXRef.current
+      if (draggingRef.current === 'left') {
+        setLeftWidth(Math.min(SIDE_MAX, Math.max(SIDE_MIN, startWidthRef.current + delta)))
+      } else {
+        setRightWidth(Math.min(SIDE_MAX, Math.max(SIDE_MIN, startWidthRef.current - delta)))
+      }
+    }
+    const onUp = () => {
+      draggingRef.current = null
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [leftWidth, rightWidth])
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#0a0d10] text-gray-300">
@@ -92,7 +127,11 @@ export function MainLayout() {
       </header>
 
       <div className="flex flex-1 flex-row overflow-hidden">
-        <aside className="flex w-80 shrink-0 flex-col gap-3 overflow-y-auto border-r border-white/[0.08] p-3">
+        {/* Left panel — Situations / vitals */}
+        <aside
+          className="flex shrink-0 flex-col gap-3 overflow-y-auto border-r border-white/[0.08] p-3"
+          style={{ width: leftWidth }}
+        >
           <div className="flex items-center justify-between px-1">
             <p className="dash-label tracking-[0.14em]">Situations / vitals</p>
             <span className="font-data text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dash-text-secondary)]">
@@ -119,6 +158,18 @@ export function MainLayout() {
           <SystemAlertsPanel alerts={telemetry.systemAlerts} />
         </aside>
 
+        {/* Left drag handle */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize left panel"
+          onMouseDown={(e) => onHandleMouseDown('left', e)}
+          className="group relative w-1.5 shrink-0 cursor-col-resize bg-white/[0.03] transition-colors hover:bg-[color-mix(in_srgb,var(--dash-accent)_35%,transparent)] active:bg-[color-mix(in_srgb,var(--dash-accent)_55%,transparent)]"
+        >
+          <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-white/[0.08] transition-colors group-hover:bg-cyan-400/40" />
+        </div>
+
+        {/* Centre panel — Video feed */}
         <section className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(0,229,255,0.10),transparent_55%)]" />
           <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] opacity-60" />
@@ -147,7 +198,22 @@ export function MainLayout() {
           </div>
         </section>
 
-        <aside className="flex w-80 shrink-0 flex-col gap-3 overflow-y-auto border-l border-white/[0.08] p-3">
+        {/* Right drag handle */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize right panel"
+          onMouseDown={(e) => onHandleMouseDown('right', e)}
+          className="group relative w-1.5 shrink-0 cursor-col-resize bg-white/[0.03] transition-colors hover:bg-[color-mix(in_srgb,var(--dash-accent)_35%,transparent)] active:bg-[color-mix(in_srgb,var(--dash-accent)_55%,transparent)]"
+        >
+          <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-white/[0.08] transition-colors group-hover:bg-cyan-400/40" />
+        </div>
+
+        {/* Right panel — AI intelligence / transcript */}
+        <aside
+          className="flex shrink-0 flex-col gap-3 overflow-y-auto border-l border-white/[0.08] p-3"
+          style={{ width: rightWidth }}
+        >
           <div className="flex items-center justify-between px-1">
             <p className="dash-label tracking-[0.14em]">AI intelligence</p>
             <span className="font-data text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dash-text-secondary)]">
