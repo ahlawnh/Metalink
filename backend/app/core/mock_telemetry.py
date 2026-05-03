@@ -52,6 +52,7 @@ def _normal_case(sequence: int) -> TelemetryUpdate:
         ),
         consciousness_level=ConsciousnessLevel.RESPONSIVE,
         transcript_snippet="Caller says the patient is breathing and responding to their name.",
+        rolling_summary="Awaiting scene context...",
         pipeline_status=PipelineStatus.MOCK,
         critical_alerts=[],
     )
@@ -71,6 +72,7 @@ def _overdose_case(sequence: int) -> TelemetryUpdate:
         ),
         consciousness_level=ConsciousnessLevel.UNRESPONSIVE,
         transcript_snippet="Bystander says breathe every several seconds; no patient response heard.",
+        rolling_summary="Mock rolling summary: Bystander says breathe every several seconds; no patient response heard.",
         pipeline_status=PipelineStatus.MOCK,
         critical_alerts=[
             CriticalAlert(
