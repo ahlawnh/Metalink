@@ -3,7 +3,11 @@ uvicorn[standard]>=0.30.0
 pydantic>=2.7.0
 python-dotenv>=1.0.1
 openai
-deepgram-sdk
+deepgram-sdk>=6.0,<7
 livekit
 pillow
 pytest>=8.0.0
+
+# Local mic → Deepgram test (`python -m scripts.mic_deepgram_stress_test`)
+sounddevice>=0.5.0
+numpy>=1.26.0

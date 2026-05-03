@@ -14,36 +14,38 @@ export default function CallerLocationPanel({ location }: CallerLocationPanelPro
 
   return (
     <section
-      className="flex min-h-0 flex-1 flex-col rounded-xl border border-zinc-700 bg-zinc-900 p-4 shadow-md shadow-black/25"
+      className="dash-card flex min-h-0 flex-1 flex-col p-4"
       aria-label="Caller approximate location"
     >
       {/* Fixed minimum height consumes column slack under the fixed-aspect video without shifting other panes. */}
-      <p className="text-xs uppercase tracking-widest text-zinc-400">Caller location</p>
-      <p className="mt-2 text-lg font-semibold leading-snug text-zinc-100">{location.label}</p>
+      <p className="dash-label">Caller location</p>
+      <p className="mt-2 text-xl font-bold leading-snug text-[var(--dash-text-primary)]">{location.label}</p>
 
       <dl className="mt-4 grid flex-1 grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-        <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2">
-          <dt className="text-xs uppercase tracking-wider text-zinc-500">Latitude</dt>
-          <dd className="mt-1 font-mono tabular-nums text-zinc-200">
+        <div className="dash-inset px-3 py-2">
+          <dt className="dash-label">Latitude</dt>
+          <dd className="mt-1 font-data text-lg font-bold tabular-nums text-[var(--dash-text-primary)]">
             {hasCoords ? location.latitude.toFixed(5) : '—'}
           </dd>
         </div>
-        <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2">
-          <dt className="text-xs uppercase tracking-wider text-zinc-500">Longitude</dt>
-          <dd className="mt-1 font-mono tabular-nums text-zinc-200">
+        <div className="dash-inset px-3 py-2">
+          <dt className="dash-label">Longitude</dt>
+          <dd className="mt-1 font-data text-lg font-bold tabular-nums text-[var(--dash-text-primary)]">
             {hasCoords ? location.longitude.toFixed(5) : '—'}
           </dd>
         </div>
         {typeof location.accuracy_m === 'number' ? (
-          <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2 sm:col-span-2">
-            <dt className="text-xs uppercase tracking-wider text-zinc-500">Estimated accuracy</dt>
-            <dd className="mt-1 font-mono tabular-nums text-zinc-200">± {Math.round(location.accuracy_m)} m</dd>
+          <div className="dash-inset px-3 py-2 sm:col-span-2">
+            <dt className="dash-label">Estimated accuracy</dt>
+            <dd className="mt-1 font-data text-lg font-bold tabular-nums text-[var(--dash-text-primary)]">
+              ± {Math.round(location.accuracy_m)} m
+            </dd>
           </div>
         ) : null}
       </dl>
 
       {typeof location.updated_at === 'string' ? (
-        <p className="mt-3 text-xs tabular-nums text-zinc-500">
+        <p className="mt-3 font-data text-[11px] tabular-nums text-[var(--dash-text-secondary)]">
           Last updated {new Date(location.updated_at).toLocaleString()}
         </p>
       ) : null}
@@ -54,13 +56,15 @@ export default function CallerLocationPanel({ location }: CallerLocationPanelPro
             href={mapsHref}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center rounded-md border border-cyan-600/60 bg-cyan-950/40 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-cyan-100 hover:bg-cyan-900/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+            className="inline-flex items-center rounded-md bg-[color-mix(in_srgb,#18FFFF_14%,var(--dash-surface-raised))] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#80FFFF] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ring-1 ring-[color-mix(in_srgb,#00E5FF_55%,transparent)] hover:bg-[color-mix(in_srgb,#18FFFF_22%,var(--dash-surface-raised))] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00E5FF]"
           >
             Open in maps
           </a>
         </div>
       ) : (
-        <p className="mt-4 shrink-0 text-xs text-zinc-500">Map link appears when latitude and longitude resolve.</p>
+        <p className="mt-4 shrink-0 text-xs text-[var(--dash-text-secondary)]">
+          Map link appears when latitude and longitude resolve.
+        </p>
       )}
     </section>
   )

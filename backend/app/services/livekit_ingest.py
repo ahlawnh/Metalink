@@ -27,10 +27,6 @@ class LiveKitConfig:
     frame_sample_interval_s: float = 2.5
 
 
-def _is_mock() -> bool:
-    return os.getenv("MOCK_AI", "").lower() in {"1", "true", "yes"}
-
-
 def _track_is_screen_share(track: Any) -> bool:
     """Prefer phone camera over screen-share if both exist (e.g. accidental share)."""
     src = getattr(track, "source", None)
@@ -86,6 +82,7 @@ async def run_ingestion_loop(
     *,
     state: TelemetryState,
     cfg: LiveKitConfig,
+    mock_ai: bool,
     openai_model: str = "gpt-5.4",
     frame_max_width: int = 768,
 ) -> None:
@@ -99,7 +96,7 @@ async def run_ingestion_loop(
     - After every update, call Hacker 4 broadcaster via publish_* helpers.
     """
 
-    if _is_mock():
+    if mock_ai:
         await asyncio.gather(
             _mock_vision_loop(state=state, interval_s=cfg.frame_sample_interval_s),
             _mock_transcript_loop(state=state),
@@ -171,6 +168,10 @@ async def run_ingestion_loop(
         await room.disconnect()
 
 
+def _log_mock_ticks_enabled() -> bool:
+    return os.getenv("AEGIS_LOG_MOCK_TICKS", "").lower() in {"1", "true", "yes", "on"}
+
+
 async def _mock_vision_loop(*, state: TelemetryState, interval_s: float) -> None:
     i = 0
     while True:
@@ -178,6 +179,8 @@ async def _mock_vision_loop(*, state: TelemetryState, interval_s: float) -> None
         vr: VisionResult = await analyze_frame_with_gpt54(frame_b64_jpeg="", mock_ai=True, seed=i)
         state.latest_vision = _vision_to_state_dict(vr)
         await publish_telemetry(state)
+        if _log_mock_ticks_enabled():
+            print(f"[mock-ingest] vision tick {i} (interval {interval_s}s) -> publish_telemetry / WS broadcast", flush=True)
         i += 1
 
 

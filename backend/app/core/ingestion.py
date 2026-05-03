@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 
 from app.core.config import Settings
 from app.core.mock_telemetry import build_mock_telemetry
@@ -28,12 +29,17 @@ async def run_safe_ingestion_loop(settings: Settings) -> None:
         return
 
     print("Aegis-Link: ingestion loop task started (ENABLE_INGESTION_LOOP=true).")
+    print(
+        "Aegis-Link: mock_ai=%s (MOCK_AI in process env after load_env: %r)"
+        % (settings.mock_ai, os.environ.get("MOCK_AI"))
+    )
 
     while True:
         try:
             await run_ingestion_loop(
                 state=telemetry_state,
                 cfg=build_livekit_config(settings),
+                mock_ai=settings.mock_ai,
                 frame_max_width=768,
             )
         except asyncio.CancelledError:
