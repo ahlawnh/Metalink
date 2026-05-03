@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Circle, GoogleMap, Marker, useJsApiLoader } from '@react-google-maps/api'
 import { cn } from '@/lib/utils'
 import type { CallerLocationTelemetry } from '@/types/dashboard'
@@ -26,9 +27,10 @@ function hasValidCoords(location: CallerLocationTelemetry): boolean {
 interface MapEmbedProps {
   center: google.maps.LatLngLiteral
   accuracyM?: number
+  zoom?: number
 }
 
-function GoogleMapEmbed({ center, accuracyM }: MapEmbedProps) {
+function GoogleMapEmbed({ center, accuracyM, zoom = 16 }: MapEmbedProps) {
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim() ?? ''
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'metalink-google-map-script',
@@ -80,13 +82,20 @@ function GoogleMapEmbed({ center, accuracyM }: MapEmbedProps) {
   const onMapLoad = (map: google.maps.Map) => {
     mapRef.current = map
     map.panTo(center)
+    const bump = () => {
+      window.google.maps.event.trigger(map, 'resize')
+      map.panTo(center)
+    }
+    requestAnimationFrame(bump)
+    window.setTimeout(bump, 120)
+    window.setTimeout(bump, 400)
   }
 
   return (
     <GoogleMap
       mapContainerStyle={MAP_CONTAINER_STYLE}
       center={center}
-      zoom={16}
+      zoom={zoom}
       onLoad={onMapLoad}
       options={{
         fullscreenControl: false,
@@ -124,6 +133,23 @@ function GoogleMapEmbed({ center, accuracyM }: MapEmbedProps) {
   )
 }
 
+/** Wrapper gives Maps API a definite height — percentage sizing inside GoogleMap otherwise stays 0 in flex overlays. */
+function GoogleMapEmbedFill({
+  center,
+  accuracyM,
+  zoom,
+}: {
+  center: google.maps.LatLngLiteral
+  accuracyM?: number
+  zoom?: number
+}) {
+  return (
+    <div className="absolute inset-0 min-h-[240px]">
+      <GoogleMapEmbed center={center} accuracyM={accuracyM} zoom={zoom} />
+    </div>
+  )
+}
+
 export default function CallerLocationMapPanel({
   location,
   wsConnected = false,
@@ -132,6 +158,7 @@ export default function CallerLocationMapPanel({
   className,
 }: CallerLocationMapPanelProps) {
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [mapExpanded, setMapExpanded] = useState(false)
   const hasCoords = hasValidCoords(location)
   const mapsKey = Boolean(import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim())
 
@@ -154,6 +181,119 @@ export default function CallerLocationMapPanel({
   const lngLabel = hasCoords ? location.longitude.toFixed(5) : '—'
 
   const showRefresh = typeof onRefreshLocation === 'function'
+
+  const mapExpandable = mapsKey && Boolean(center)
+
+  useEffect(() => {
+    if (!mapExpanded) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMapExpanded(false)
+    }
+    window.addEventListener('keydown', onKey)
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prevOverflow
+    }
+  }, [mapExpanded])
+
+  const coordsFooter = (dense: boolean) =>
+    hasCoords ? (
+      <div
+        className={cn(
+          'bg-[color-mix(in_srgb,var(--dash-bg)_82%,transparent)] backdrop-blur-md',
+          dense ? 'px-2 py-1' : 'px-4 py-3',
+        )}
+      >
+        <div
+          className={cn(
+            'flex flex-wrap items-baseline gap-x-5 gap-y-0.5 font-data font-bold tabular-nums text-[var(--dash-text-primary)]',
+            dense ? 'gap-x-3 text-[10px]' : 'text-[13px]',
+          )}
+        >
+          <span>
+            <span className="mr-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dash-text-secondary)]">
+              Lat
+            </span>
+            {latLabel}
+          </span>
+          <span>
+            <span className="mr-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dash-text-secondary)]">
+              Lng
+            </span>
+            {lngLabel}
+          </span>
+          {typeof location.accuracy_m === 'number' ? (
+            <span className="text-[11px] font-semibold text-[var(--dash-text-secondary)]">
+              ±{Math.round(location.accuracy_m)} m
+            </span>
+          ) : null}
+        </div>
+        {typeof location.updated_at === 'string' ? (
+          <p className="mt-0.5 font-data text-[10px] tabular-nums text-[var(--dash-text-secondary)]">
+            Updated {new Date(location.updated_at).toLocaleTimeString()}
+          </p>
+        ) : null}
+      </div>
+    ) : null
+
+  const expandedOverlay =
+    mapExpanded && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            className="fixed inset-0 z-[800] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm sm:p-8"
+            role="presentation"
+            onClick={() => setMapExpanded(false)}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="caller-map-expanded-title"
+              className="flex max-h-[92vh] w-full max-w-5xl min-h-0 flex-col overflow-hidden rounded-2xl border border-white/[0.12] bg-[#0a0d10] shadow-[0_40px_120px_rgba(0,0,0,0.85)] ring-2 ring-[color-mix(in_srgb,#00E5FF_18%,transparent)]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex shrink-0 flex-wrap items-start justify-between gap-3 border-b border-white/[0.08] bg-black/40 px-4 py-3">
+                <div className="min-w-0">
+                  <p id="caller-map-expanded-title" className="dash-label tracking-[0.14em] text-cyan-100/80">
+                    Caller location
+                  </p>
+                  <p className="mt-1 text-base font-bold leading-snug text-[var(--dash-text-primary)]">
+                    {location.label}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {showRefresh ? (
+                    <button
+                      type="button"
+                      disabled={!wsConnected || isRefreshing}
+                      onClick={handleRefresh}
+                      title={wsConnected ? undefined : 'Connect to telemetry to refresh fused GPS'}
+                      className="rounded-md bg-[var(--dash-surface-raised)] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--dash-text-primary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ring-white/[0.1] hover:bg-[color-mix(in_srgb,var(--dash-surface-raised)_90%,#fff)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00E5FF] disabled:pointer-events-none disabled:opacity-45"
+                    >
+                      {isRefreshing ? 'Refreshing…' : 'Refresh location'}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => setMapExpanded(false)}
+                    className="rounded-md bg-white/[0.06] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--dash-text-primary)] ring-1 ring-white/[0.12] hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00E5FF]"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+              <div className="relative h-[70vh] max-h-[640px] min-h-[280px] w-full shrink-0 bg-[var(--dash-bg)]">
+                {center ? (
+                  <GoogleMapEmbedFill center={center} accuracyM={location.accuracy_m} zoom={17} />
+                ) : null}
+              </div>
+              {coordsFooter(false)}
+            </div>
+          </div>,
+          document.body,
+        )
+      : null
 
   return (
     <section
@@ -201,10 +341,25 @@ export default function CallerLocationMapPanel({
         className={cn(
           'relative overflow-hidden rounded-lg bg-[var(--dash-bg)] ring-1 ring-white/[0.06]',
           compact ? 'mt-1.5 h-[132px]' : 'mt-2 min-h-0 flex-1',
+          mapExpandable && 'cursor-zoom-in focus-within:ring-2 focus-within:ring-[#00E5FF]/40',
         )}
       >
         {mapsKey && center ? (
-          <GoogleMapEmbed center={center} accuracyM={location.accuracy_m} />
+          <button
+            type="button"
+            className="relative block h-full min-h-0 w-full border-0 bg-transparent p-0 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#00E5FF]"
+            onClick={() => setMapExpanded(true)}
+            aria-label="Expand caller location map"
+          >
+            {compact ? (
+              <span className="pointer-events-none absolute inset-x-0 top-2 z-[1] inline-flex justify-center px-2">
+                <span className="rounded-full bg-black/55 px-2 py-0.5 font-data text-[9px] font-semibold uppercase tracking-[0.14em] text-white/75 backdrop-blur-sm">
+                  Tap to expand
+                </span>
+              </span>
+            ) : null}
+            <GoogleMapEmbed center={center} accuracyM={location.accuracy_m} />
+          </button>
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
             <p className="text-sm font-medium text-[var(--dash-text-secondary)]">
@@ -216,40 +371,11 @@ export default function CallerLocationMapPanel({
         )}
 
         {hasCoords ? (
-          <div
-            className={cn(
-              'pointer-events-none absolute bottom-0 left-0 right-0 bg-[color-mix(in_srgb,var(--dash-bg)_82%,transparent)] backdrop-blur-md',
-              compact ? 'px-2 py-1' : 'px-3 py-2',
-            )}
-          >
-            <div
-              className={cn(
-                'flex flex-wrap items-baseline gap-x-5 gap-y-0.5 font-data font-bold tabular-nums text-[var(--dash-text-primary)]',
-                compact ? 'gap-x-3 text-[10px]' : 'text-[13px]',
-              )}
-            >
-              <span>
-                <span className="mr-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dash-text-secondary)]">Lat</span>
-                {latLabel}
-              </span>
-              <span>
-                <span className="mr-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dash-text-secondary)]">Lng</span>
-                {lngLabel}
-              </span>
-              {typeof location.accuracy_m === 'number' ? (
-                <span className="text-[11px] font-semibold text-[var(--dash-text-secondary)]">
-                  ±{Math.round(location.accuracy_m)} m
-                </span>
-              ) : null}
-            </div>
-            {typeof location.updated_at === 'string' ? (
-              <p className="mt-0.5 font-data text-[10px] tabular-nums text-[var(--dash-text-secondary)]">
-                Updated {new Date(location.updated_at).toLocaleTimeString()}
-              </p>
-            ) : null}
-          </div>
+          <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-[2]">{coordsFooter(compact)}</div>
         ) : null}
       </div>
+
+      {expandedOverlay}
     </section>
   )
 }
