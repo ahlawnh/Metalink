@@ -205,14 +205,10 @@ export function applyTelemetryUpdate(
   const systemAlerts = isIncidentPatch ? previous.systemAlerts : [...systemById.values()]
 
   const rawRate = payload.resp_rate_estimate?.value
-  const keepResp =
-    isIncidentPatch &&
-    (rawRate === null || rawRate === undefined || Number(rawRate) === 0)
-  const mergedRate = keepResp
-    ? previous.respiratory.estimated_respiratory_rate
-    : typeof rawRate === 'number' && !Number.isNaN(rawRate)
-      ? rawRate
-      : 0
+  const hasValidRate = typeof rawRate === 'number' && Number.isFinite(rawRate) && rawRate > 0
+  // Keep previous respiratory estimate whenever this payload doesn't carry a valid RR.
+  const keepResp = !hasValidRate
+  const mergedRate = keepResp ? previous.respiratory.estimated_respiratory_rate : rawRate
 
   const pipelineStatus = payload.pipeline_status ?? 'mock'
   const baseResp = payload.resp_rate_estimate ?? { value: null, method: 'unknown', confidence: 0 }
@@ -241,10 +237,11 @@ export function applyTelemetryUpdate(
         previous.respiratory.estimated_respiratory_rate > 0
       ? [previous.respiratory.estimated_respiratory_rate]
       : []
-  const history_rr = keepResp
-    ? previous.respiratory.history_rr ?? []
-    : typeof mergedRate === 'number' && Number.isFinite(mergedRate) && mergedRate > 0
-      ? [...prevHist, mergedRate].slice(-32)
+  const history_rr =
+    typeof mergedRate === 'number' && Number.isFinite(mergedRate) && mergedRate > 0
+      ? keepResp
+        ? prevHist
+        : [...prevHist, mergedRate].slice(-32)
       : prevHist
 
   const segmentChunks = Array.isArray(payload.transcript_segments)
