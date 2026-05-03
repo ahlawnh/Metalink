@@ -58,6 +58,13 @@ def classify_livekit_audio_participant(
     caller_identity: Optional[str] = None,
     dispatcher_identity_prefix: Optional[str] = None,
 ) -> Optional[TranscriptSpeaker]:
+    """Map LiveKit participant identities to transcript speaker roles.
+
+    Bystander tokens default to unique `bystander-*` identities, so caller
+    audio cannot rely on one exact identity string. After excluding the
+    backend participant and known dispatcher prefix, remaining human audio is
+    treated as caller audio.
+    """
     normalized = (identity or "").strip()
     if not normalized or normalized == backend_identity:
         return None
@@ -73,7 +80,7 @@ def classify_livekit_audio_participant(
         return "caller"
     if dispatcher_prefix and normalized.startswith(dispatcher_prefix):
         return "dispatcher"
-    return None
+    return "caller"
 
 
 def _identity_from_track_args(args: tuple[Any, ...]) -> str:
@@ -230,7 +237,10 @@ async def run_ingestion_loop(
         elif kind == rtc.TrackKind.KIND_AUDIO:
             identity = _identity_from_track_args(args)
             speaker = classify_livekit_audio_participant(identity, backend_identity=cfg.identity)
-            if speaker is None or speaker in transcript_tasks:
+            if speaker is None:
+                print(f"LiveKit audio track ignored: unclassified participant identity={identity!r}", flush=True)
+                return
+            if speaker in transcript_tasks:
                 return
             task = asyncio.create_task(
                 _transcript_loop_from_livekit_track(
