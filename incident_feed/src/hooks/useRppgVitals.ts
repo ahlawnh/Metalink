@@ -53,6 +53,7 @@ export function useRppgVitals(
   const faceMeshRef = useRef<FaceMesh | null>(null);
   const lastProcessRef = useRef(0);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const lastGoodRrRef = useRef(0);
 
   const [state, setState] = useState<RppgVitalsState>(IDLE);
 
@@ -71,6 +72,12 @@ export function useRppgVitals(
       const now = performance.now() / 1000;
       const rrRecent = buf.filter((s) => s.t > now - RPPG_RR_WINDOW_SEC);
       const rrEst = estimateRateFromSignal(rrRecent, 6, 32);
+      const rrRounded = Math.round(rrEst * 10) / 10;
+      const rrValid = Number.isFinite(rrRounded) && rrRounded >= 6 && rrRounded <= 40;
+      if (rrValid) {
+        lastGoodRrRef.current = rrRounded;
+      }
+      const rrDisplay = rrValid ? rrRounded : lastGoodRrRef.current;
 
       const fft = estimateBpmFft(buf, now);
       const hist = bpmRawHistoryRef.current;
@@ -83,13 +90,13 @@ export function useRppgVitals(
           ...s,
           bpmDisplay: Math.round(smoothed),
           bpmAnalyzing: false,
-          rr: Math.round(rrEst * 10) / 10 || 0,
+          rr: rrDisplay > 0 ? rrDisplay : s.rr,
         }));
       } else {
         setState((s) => ({
           ...s,
           bpmAnalyzing: true,
-          rr: Math.round(rrEst * 10) / 10 || 0,
+          rr: rrDisplay > 0 ? rrDisplay : s.rr,
         }));
       }
     };
@@ -245,6 +252,7 @@ export function useRppgVitals(
       faceMeshRef.current = null;
       samplesRef.current = [];
       bpmRawHistoryRef.current = [];
+      lastGoodRrRef.current = 0;
       canvasRef.current = null;
     };
   }, [active, videoRef]);
