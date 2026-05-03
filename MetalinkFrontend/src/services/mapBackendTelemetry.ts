@@ -161,11 +161,21 @@ export function applyTelemetryUpdate(
 
   const scene = detectedItemsToHazards(payload.scene_hazards ?? [], 'scene', now)
   const subs = detectedItemsToHazards(payload.substances ?? [], 'substance', now)
-  const fromAlerts = alertsToHazards(payload.critical_alerts ?? [], now)
+
+  const criticalRaw = payload.critical_alerts ?? []
+  const sceneRelatedAlerts = criticalRaw.filter((a) => a.source !== 'system')
+  const systemAlertsRaw = criticalRaw.filter((a) => a.source === 'system')
+  const fromSceneAlerts = alertsToHazards(sceneRelatedAlerts, now)
+  const fromSystemAlerts = alertsToHazards(systemAlertsRaw, now)
 
   const hazardById = new Map<string, HazardTelemetry>()
-  for (const h of [...fromAlerts, ...scene, ...subs]) {
+  for (const h of [...fromSceneAlerts, ...scene, ...subs]) {
     hazardById.set(h.id, h)
+  }
+
+  const systemById = new Map<string, HazardTelemetry>()
+  for (const h of fromSystemAlerts) {
+    systemById.set(h.id, h)
   }
 
   /** incident_feed batches are LIVE with empty hazard lists — keep existing hazards from vision/mock. */
@@ -176,6 +186,7 @@ export function applyTelemetryUpdate(
     (payload.critical_alerts?.length ?? 0) === 0
 
   const hazards = isIncidentPatch ? previous.hazards : [...hazardById.values()]
+  const systemAlerts = isIncidentPatch ? previous.systemAlerts : [...systemById.values()]
 
   const rawRate = payload.resp_rate_estimate?.value
   const keepResp =
@@ -277,6 +288,7 @@ export function applyTelemetryUpdate(
       history_rr,
     },
     hazards,
+    systemAlerts,
     transcript,
     video: {
       ...previous.video,
@@ -299,6 +311,21 @@ export function applyCriticalAlertEvent(
     confidence: alert.confidence,
     detectedAt,
     description: alert.message,
+  }
+
+  const isSystem = alert.source === 'system'
+
+  if (isSystem) {
+    const withoutDup = previous.systemAlerts.filter((h) => h.id !== hazard.id)
+    return {
+      ...previous,
+      updatedAt: detectedAt,
+      systemAlerts: [hazard, ...withoutDup],
+      respiratory:
+        alert.severity === 'critical'
+          ? { ...previous.respiratory, respiratory_status: 'critical' }
+          : previous.respiratory,
+    }
   }
 
   const withoutDup = previous.hazards.filter((h) => h.id !== hazard.id)

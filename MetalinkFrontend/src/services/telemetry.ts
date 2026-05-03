@@ -103,6 +103,7 @@ export function normalizeTelemetryPayload(input: unknown): DashboardTelemetryPay
     },
     respiratory: normalizeRespiratory(data),
     hazards: Array.isArray(data.hazards) ? data.hazards : [],
+    systemAlerts: Array.isArray(data.systemAlerts) ? data.systemAlerts : [],
     transcript: Array.isArray(data.transcript) ? data.transcript : [],
     transcript_ai_summary: normalizeTranscriptAISummary(data),
     video: {

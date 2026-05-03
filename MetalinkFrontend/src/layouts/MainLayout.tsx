@@ -1,6 +1,7 @@
 import CallerLocationMapPanel from '@/components/dashboard/CallerLocationMapPanel'
 import CprMetronomeDispatchPanel from '@/components/dashboard/CprMetronomeDispatchPanel'
 import HazardList from '@/components/dashboard/HazardList'
+import SystemAlertsPanel from '@/components/dashboard/SystemAlertsPanel'
 import VitalsTelemetryCards from '@/components/dashboard/VitalsTelemetryCards'
 import TranscriptSummary from '@/components/dashboard/TranscriptSummary'
 import VideoPlayer from '@/components/dashboard/VideoPlayer'
@@ -80,6 +81,7 @@ export function MainLayout() {
           respiratory={telemetry.respiratory}
           telemetryCueRevision={Math.floor(Date.parse(telemetry.updatedAt) / 1000) || 0}
         />
+        <SystemAlertsPanel alerts={telemetry.systemAlerts} />
         <HazardList hazards={telemetry.hazards} />
         <CprMetronomeDispatchPanel
           connectionState={connectionState}
