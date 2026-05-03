@@ -101,11 +101,11 @@ export default function IncidentFeedPage() {
     <main className="flex min-h-[100dvh] flex-col items-center justify-center bg-neutral-50 px-6 py-12">
       <div className="mx-auto flex w-full max-w-md flex-col items-center text-center">
         <h1 className="text-3xl font-light tracking-tight text-neutral-900 sm:text-[2rem]">
-          Welcome to D/spatch.
+          Welcome to D/SPATCH.
         </h1>
 
         <p className="mt-10 max-w-sm text-[15px] leading-relaxed text-neutral-500">
-          You&apos;ll join a secure voice call with emergency services. D/spatch may
+          You&apos;ll join a secure voice call with emergency services. D/SPATCH may
           request camera and location access to help responders.
         </p>
         <p className="mt-4 max-w-sm text-[15px] leading-relaxed text-neutral-500">
@@ -118,7 +118,7 @@ export default function IncidentFeedPage() {
           disabled={connecting}
           className="mt-12 min-w-[220px] rounded-full bg-neutral-900 px-10 py-3.5 text-[15px] font-medium text-white shadow-sm transition hover:bg-neutral-800 disabled:opacity-50"
         >
-          {connecting ? "Connecting…" : "Connect to D/spatch"}
+          {connecting ? "Connecting…" : "Connect to D/SPATCH"}
         </button>
 
         {connectError ? (

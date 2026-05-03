@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Incident feed",
-  description: "D/spatch caller link",
+  title: "D/SPATCH",
+  description: "D/SPATCH caller link",
 };
 
 export default function RootLayout({
