@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Circle, GoogleMap, Marker, useJsApiLoader } from '@react-google-maps/api'
-import ShareLocationModal from '@/components/dashboard/ShareLocationModal'
 import type { CallerLocationTelemetry } from '@/types/dashboard'
 
 const MAP_CONTAINER_STYLE: { width: string; height: string } = { width: '100%', height: '100%' }
 
 interface CallerLocationMapPanelProps {
   location: CallerLocationTelemetry
+  onRefreshLocation: () => void
+  wsConnected: boolean
 }
 
 function hasValidCoords(location: CallerLocationTelemetry): boolean {
@@ -107,8 +108,14 @@ function GoogleMapEmbed({ center, accuracyM }: MapEmbedProps) {
   )
 }
 
-export default function CallerLocationMapPanel({ location }: CallerLocationMapPanelProps) {
-  const [shareOpen, setShareOpen] = useState(false)
+export default function CallerLocationMapPanel({
+  location,
+  onRefreshLocation,
+  wsConnected,
+}: CallerLocationMapPanelProps) {
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const lastUpdatedRef = useRef(location.updated_at)
+
   const hasCoords = hasValidCoords(location)
   const mapsKey = Boolean(import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim())
 
@@ -120,13 +127,27 @@ export default function CallerLocationMapPanel({ location }: CallerLocationMapPa
   const latLabel = hasCoords ? location.latitude.toFixed(5) : '—'
   const lngLabel = hasCoords ? location.longitude.toFixed(5) : '—'
 
-  const handleConfirmShare = () => {
-    // Stub — replace with CAD/SMS/share-channel integration.
-    console.info('[dispatch-ui] Share location confirmed', {
-      label: location.label,
-      latitude: location.latitude,
-      longitude: location.longitude,
-    })
+  useEffect(() => {
+    if (!isRefreshing) {
+      lastUpdatedRef.current = location.updated_at
+      return
+    }
+    if (location.updated_at !== lastUpdatedRef.current) {
+      setIsRefreshing(false)
+      lastUpdatedRef.current = location.updated_at
+    }
+  }, [location.updated_at, isRefreshing])
+
+  useEffect(() => {
+    if (!isRefreshing) return
+    const id = window.setTimeout(() => setIsRefreshing(false), 8000)
+    return () => window.clearTimeout(id)
+  }, [isRefreshing])
+
+  const handleRefresh = () => {
+    if (!wsConnected || isRefreshing) return
+    setIsRefreshing(true)
+    onRefreshLocation()
   }
 
   return (
@@ -138,11 +159,12 @@ export default function CallerLocationMapPanel({ location }: CallerLocationMapPa
         </div>
         <button
           type="button"
-          disabled={!hasCoords}
-          onClick={() => setShareOpen(true)}
+          disabled={!wsConnected || isRefreshing}
+          onClick={handleRefresh}
+          title={wsConnected ? undefined : 'Connect to telemetry to refresh fused GPS'}
           className="rounded-md bg-[var(--dash-surface-raised)] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--dash-text-primary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ring-white/[0.1] hover:bg-[color-mix(in_srgb,var(--dash-surface-raised)_90%,#fff)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00E5FF] disabled:pointer-events-none disabled:opacity-45"
         >
-          Share location
+          {isRefreshing ? 'Refreshing…' : 'Refresh location'}
         </button>
       </div>
 
@@ -203,15 +225,6 @@ export default function CallerLocationMapPanel({ location }: CallerLocationMapPa
           Last updated {new Date(location.updated_at).toLocaleString()}
         </p>
       ) : null}
-
-      <ShareLocationModal
-        open={shareOpen}
-        onClose={() => setShareOpen(false)}
-        locationLabel={location.label}
-        latitudeLabel={latLabel}
-        longitudeLabel={lngLabel}
-        onConfirmShare={handleConfirmShare}
-      />
     </section>
   )
 }

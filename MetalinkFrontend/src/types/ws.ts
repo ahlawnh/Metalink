@@ -2,6 +2,7 @@
 
 export type BackendEventType =
   | 'telemetry.update'
+  | 'telemetry.summary_updated'
   | 'alert.critical'
   | 'pipeline.status'
   | 'heartbeat'
@@ -33,6 +34,14 @@ export interface BackendCriticalAlert {
   source: string
 }
 
+export interface BackendCallerLocationSnapshot {
+  label?: string
+  latitude: number
+  longitude: number
+  accuracy_m?: number
+  updated_at?: string
+}
+
 export interface BackendTelemetryUpdatePayload {
   timestamp?: string
   scene_hazards: BackendDetectedItem[]
@@ -44,6 +53,8 @@ export interface BackendTelemetryUpdatePayload {
   transcript_snippet: string
   pipeline_status: 'mock' | 'degraded' | 'live'
   critical_alerts: BackendCriticalAlert[]
+  /** When present, replaces dashboard caller map pin (e.g. after `request.caller_location`). */
+  caller_location?: BackendCallerLocationSnapshot
 }
 
 export interface BackendHeartbeatPayload {

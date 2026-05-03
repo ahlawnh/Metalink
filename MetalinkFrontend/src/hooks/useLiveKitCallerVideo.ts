@@ -3,11 +3,13 @@ import {
   Room,
   RoomEvent,
   Track,
+  type RemoteAudioTrack,
   type RemoteParticipant,
   type RemoteVideoTrack,
 } from 'livekit-client'
 import type { RefObject } from 'react'
 import { useEffect, useRef, useState } from 'react'
+import { resolveLiveKitSession } from '@/services/livekitSession'
 
 function envTrim(key: string): string {
   const raw = (import.meta.env as Record<string, string | undefined>)[key]
@@ -17,113 +19,203 @@ function envTrim(key: string): string {
 export interface LiveKitCallerBinding {
   connectionState: ConnectionState
   hasRemoteVideo: boolean
+  hasRemoteAudio: boolean
+  /** Caller muted their microphone at the source (remote publication). */
+  remoteMicMuted: boolean
   error: string | null
+  /** True while resolving URL/token (including HTTP fetch). */
+  isSessionLoading: boolean
 }
 
 /**
- * Subscriber-only LiveKit session: attaches the caller's remote camera to `videoRef`.
- * Never enables local camera/mic — operator workstation stays receive-only.
+ * Subscriber-only LiveKit session: attaches the caller's remote camera to `videoRef`
+ * and remote microphone to `audioRef`. Never enables local camera/mic.
  */
 export function useLiveKitCallerVideo(
   enabled: boolean,
   videoRef: RefObject<HTMLVideoElement | null>,
+  audioRef: RefObject<HTMLAudioElement | null>,
 ): LiveKitCallerBinding {
   const [connectionState, setConnectionState] = useState<ConnectionState>(ConnectionState.Disconnected)
   const [hasRemoteVideo, setHasRemoteVideo] = useState(false)
+  const [hasRemoteAudio, setHasRemoteAudio] = useState(false)
+  const [remoteMicMuted, setRemoteMicMuted] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const attachedRef = useRef<RemoteVideoTrack | null>(null)
+  const [isSessionLoading, setIsSessionLoading] = useState(true)
+
+  const attachedVideoRef = useRef<RemoteVideoTrack | null>(null)
+  const attachedAudioRef = useRef<RemoteAudioTrack | null>(null)
+  const roomRef = useRef<Room | null>(null)
 
   useEffect(() => {
-    if (!enabled) return
-
-    const url = envTrim('VITE_LIVEKIT_URL')
-    const token = envTrim('VITE_LIVEKIT_TOKEN')
-    if (!url || !token) {
-      console.warn('[livekit] VITE_LIVEKIT_URL / VITE_LIVEKIT_TOKEN missing — skipping join')
+    if (!enabled) {
+      setIsSessionLoading(false)
       return
     }
 
     const callerIdentity = envTrim('VITE_LIVEKIT_CALLER_PARTICIPANT_IDENTITY') || 'caller'
-    const operatorIdentity = envTrim('VITE_LIVEKIT_OPERATOR_PARTICIPANT_IDENTITY') || 'dispatcher'
+    /** Legacy filter for a second dashboard tab / agent named `dispatcher` (not the local participant). */
+    const legacyOperatorAlias = envTrim('VITE_LIVEKIT_OPERATOR_PARTICIPANT_IDENTITY') || 'dispatcher'
+    const backendIngestIdentity = envTrim('VITE_LIVEKIT_BACKEND_PARTICIPANT_IDENTITY') || 'aegis-link-backend'
 
-    const room = new Room({ adaptiveStream: true, dynacast: true })
     let cancelled = false
 
-    const detachCurrent = () => {
+    const detachVideo = () => {
       const el = videoRef.current
-      const cur = attachedRef.current
-      if (cur && el) {
-        cur.detach(el)
-      }
-      attachedRef.current = null
+      const cur = attachedVideoRef.current
+      if (cur && el) cur.detach(el)
+      attachedVideoRef.current = null
       setHasRemoteVideo(false)
     }
 
-    const pickCaller = (): RemoteParticipant | undefined => {
+    const detachAudio = () => {
+      const el = audioRef.current
+      const cur = attachedAudioRef.current
+      if (cur && el) cur.detach(el)
+      attachedAudioRef.current = null
+      setHasRemoteAudio(false)
+    }
+
+    const pickCaller = (room: Room): RemoteParticipant | undefined => {
       const remotes = [...room.remoteParticipants.values()]
       const exact = remotes.find((p) => p.identity === callerIdentity)
       if (exact) return exact
-      return remotes.find((p) => p.identity !== operatorIdentity)
+
+      const excluded = new Set(
+        [legacyOperatorAlias, backendIngestIdentity].filter((s) => s.length > 0),
+      )
+      const candidates = remotes.filter((p) => !excluded.has(p.identity))
+      const withCamera = candidates.find((p) => {
+        const pub = p.getTrackPublication(Track.Source.Camera)
+        return Boolean(pub?.track)
+      })
+      if (withCamera) return withCamera
+      return candidates[0]
     }
 
-    const syncAttach = () => {
+    const syncCallerTracks = (room: Room) => {
       if (cancelled) return
-      const el = videoRef.current
-      if (!el) return
+      const videoEl = videoRef.current
+      const audioEl = audioRef.current
+      if (!videoEl || !audioEl) return
 
-      detachCurrent()
+      detachVideo()
+      detachAudio()
 
-      const caller = pickCaller()
-      if (!caller) return
-
-      const pub = caller.getTrackPublication(Track.Source.Camera)
-      if (!pub?.isSubscribed || !pub.videoTrack) {
+      const caller = pickCaller(room)
+      if (!caller) {
+        setRemoteMicMuted(false)
         return
       }
 
-      const vt = pub.videoTrack as RemoteVideoTrack
-      vt.attach(el)
-      attachedRef.current = vt
-      setHasRemoteVideo(true)
-      void el.play().catch(() => {})
+      const camPub = caller.getTrackPublication(Track.Source.Camera)
+      if (camPub?.isSubscribed && camPub.videoTrack) {
+        const vt = camPub.videoTrack as RemoteVideoTrack
+        vt.attach(videoEl)
+        attachedVideoRef.current = vt
+        setHasRemoteVideo(true)
+        void videoEl.play().catch(() => {})
+      }
+
+      const micPub = caller.getTrackPublication(Track.Source.Microphone)
+      if (micPub?.isSubscribed && micPub.audioTrack) {
+        const at = micPub.audioTrack as RemoteAudioTrack
+        at.attach(audioEl)
+        attachedAudioRef.current = at
+        setHasRemoteAudio(true)
+        setRemoteMicMuted(Boolean(micPub.isMuted))
+        void audioEl.play().catch(() => {})
+      } else {
+        setRemoteMicMuted(false)
+      }
     }
 
-    const onConn = () => setConnectionState(room.state)
-    room.on(RoomEvent.ConnectionStateChanged, onConn)
-
-    room.on(RoomEvent.ParticipantConnected, syncAttach)
-    room.on(RoomEvent.ParticipantDisconnected, syncAttach)
-    room.on(RoomEvent.TrackSubscribed, syncAttach)
-    room.on(RoomEvent.TrackUnsubscribed, syncAttach)
-    room.on(RoomEvent.TrackMuted, syncAttach)
-    room.on(RoomEvent.TrackUnmuted, syncAttach)
-
     ;(async () => {
+      setIsSessionLoading(true)
+      setError(null)
+      let session: Awaited<ReturnType<typeof resolveLiveKitSession>>
       try {
-        setError(null)
-        await room.connect(url, token, { autoSubscribe: true })
+        session = await resolveLiveKitSession()
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : 'Failed to resolve LiveKit session')
+          setConnectionState(ConnectionState.Disconnected)
+          setIsSessionLoading(false)
+        }
+        return
+      }
+
+      if (cancelled) return
+      setIsSessionLoading(false)
+
+      const room = new Room({ adaptiveStream: true, dynacast: true })
+      roomRef.current = room
+
+      const onConn = () => setConnectionState(room.state)
+      const resync = () => syncCallerTracks(room)
+
+      room.on(RoomEvent.ConnectionStateChanged, onConn)
+      room.on(RoomEvent.ParticipantConnected, resync)
+      room.on(RoomEvent.ParticipantDisconnected, resync)
+      room.on(RoomEvent.TrackSubscribed, resync)
+      room.on(RoomEvent.TrackUnsubscribed, resync)
+      room.on(RoomEvent.TrackMuted, resync)
+      room.on(RoomEvent.TrackUnmuted, resync)
+
+      try {
+        await room.connect(session.url, session.token, { autoSubscribe: true })
+        if (cancelled) {
+          room.removeAllListeners()
+          detachVideo()
+          detachAudio()
+          void room.disconnect(true).catch(() => {})
+          roomRef.current = null
+          return
+        }
         await room.localParticipant.setCameraEnabled(false)
         await room.localParticipant.setMicrophoneEnabled(false)
         setConnectionState(room.state)
-        syncAttach()
+        syncCallerTracks(room)
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : 'LiveKit connection failed')
           setConnectionState(ConnectionState.Disconnected)
+        }
+        if (roomRef.current === room) {
+          room.removeAllListeners()
+          roomRef.current = null
+          void room.disconnect(true).catch(() => {})
         }
       }
     })()
 
     return () => {
       cancelled = true
-      room.removeAllListeners()
-      detachCurrent()
-      void room.disconnect(true).catch(() => {})
+      const room = roomRef.current
+      roomRef.current = null
+      if (room) {
+        room.removeAllListeners()
+      }
+      detachVideo()
+      detachAudio()
+      if (room) {
+        void room.disconnect(true).catch(() => {})
+      }
       setConnectionState(ConnectionState.Disconnected)
       setHasRemoteVideo(false)
+      setHasRemoteAudio(false)
+      setRemoteMicMuted(false)
+      setIsSessionLoading(false)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable RefObject from parent
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable RefObjects from parent
   }, [enabled])
 
-  return { connectionState, hasRemoteVideo, error }
+  return {
+    connectionState,
+    hasRemoteVideo,
+    hasRemoteAudio,
+    remoteMicMuted,
+    error,
+    isSessionLoading,
+  }
 }

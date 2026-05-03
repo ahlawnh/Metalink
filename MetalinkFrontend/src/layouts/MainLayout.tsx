@@ -6,7 +6,13 @@ import { useTelemetryStream } from '@/hooks/useTelemetryStream'
 import { cn } from '@/lib/utils'
 
 export function MainLayout() {
-  const { telemetry, connectionState } = useTelemetryStream()
+  const {
+    telemetry,
+    connectionState,
+    requestRollingSummary,
+    subscribeRollingSummary,
+    requestCallerLocationRefresh,
+  } = useTelemetryStream()
 
   const connectionTone =
     connectionState === 'connected'
@@ -59,14 +65,23 @@ export function MainLayout() {
               latencyMs={42}
             />
           </div>
-          <CallerLocationMapPanel location={telemetry.caller_location} />
+          <CallerLocationMapPanel
+            location={telemetry.caller_location}
+            onRefreshLocation={requestCallerLocationRefresh}
+            wsConnected={connectionState === 'connected'}
+          />
         </div>
       </div>
 
       {/* Half screen: patient cardiac + transcript */}
       <div className="flex min-h-0 flex-col gap-4 lg:min-h-dvh">
         <PatientHeartMonitor patient={telemetry.patient_heart} />
-        <TranscriptSummary chunks={telemetry.transcript} aiSummary={telemetry.transcript_ai_summary} />
+        <TranscriptSummary
+          chunks={telemetry.transcript}
+          requestRollingSummary={requestRollingSummary}
+          subscribeRollingSummary={subscribeRollingSummary}
+          wsConnected={connectionState === 'connected'}
+        />
       </div>
     </main>
   )

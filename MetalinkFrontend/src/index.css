@@ -77,6 +77,27 @@
       0 0 0 1px rgba(255, 255, 255, 0.04);
   }
 
+  /* Horizontal shimmer for AI summary skeleton (dark UI). */
+  .summary-shimmer-bg {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.04) 0%,
+      rgba(255, 255, 255, 0.09) 45%,
+      rgba(255, 255, 255, 0.04) 100%
+    );
+    background-size: 200% 100%;
+    animation: summary-shimmer-slide 1.35s ease-in-out infinite;
+  }
+
+  @keyframes summary-shimmer-slide {
+    0% {
+      background-position: 100% 0;
+    }
+    100% {
+      background-position: -100% 0;
+    }
+  }
+
   .dash-header-strip {
     border-radius: 0.5rem;
     background-color: var(--dash-surface-raised);

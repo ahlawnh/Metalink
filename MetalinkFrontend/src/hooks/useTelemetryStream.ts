@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import fallbackTelemetry from '@/data/telemetry.json'
 import {
   applyCriticalAlertEvent,
@@ -44,6 +44,12 @@ function isEnvelope(value: unknown): value is WsEnvelope {
 export function useTelemetryStream(): {
   telemetry: DashboardTelemetryPayload
   connectionState: TelemetryConnectionState
+  /** Sends `{ event_type: "request.summary" }` — backend replies with `telemetry.summary_updated` (see TELEMETRY_API.md). */
+  requestRollingSummary: () => void
+  /** Subscribe to GPT rolling summaries pushed after `requestRollingSummary`. Returns unsubscribe. */
+  subscribeRollingSummary: (fn: (text: string) => void) => () => void
+  /** Ask backend for a fresh caller GPS fix — replies with `telemetry.update` including `caller_location` when supported. */
+  requestCallerLocationRefresh: () => void
 } {
   const initial = useMemo(() => normalizeTelemetryPayload(fallbackTelemetry), [])
   const [telemetry, setTelemetry] = useState<DashboardTelemetryPayload>(initial)
@@ -51,6 +57,26 @@ export function useTelemetryStream(): {
   const wsUrl = useMemo(() => buildWsUrl(), [])
   const socketRef = useRef<WebSocket | null>(null)
   const reconnectRef = useRef<number | null>(null)
+  const rollingSummarySubscribersRef = useRef(new Set<(text: string) => void>())
+
+  const requestRollingSummary = useCallback(() => {
+    const socket = socketRef.current
+    if (!socket || socket.readyState !== WebSocket.OPEN) return
+    socket.send(JSON.stringify({ event_type: 'request.summary' }))
+  }, [])
+
+  const requestCallerLocationRefresh = useCallback(() => {
+    const socket = socketRef.current
+    if (!socket || socket.readyState !== WebSocket.OPEN) return
+    socket.send(JSON.stringify({ event_type: 'request.caller_location' }))
+  }, [])
+
+  const subscribeRollingSummary = useCallback((fn: (text: string) => void) => {
+    rollingSummarySubscribersRef.current.add(fn)
+    return () => {
+      rollingSummarySubscribersRef.current.delete(fn)
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -94,6 +120,26 @@ export function useTelemetryStream(): {
             switch (data.event_type) {
               case 'telemetry.update':
                 return applyTelemetryUpdate(prev, data.payload, data.timestamp)
+              case 'telemetry.summary_updated': {
+                const p = data.payload as { rolling_summary?: string }
+                const text = typeof p.rolling_summary === 'string' ? p.rolling_summary : ''
+                rollingSummarySubscribersRef.current.forEach((fn) => {
+                  try {
+                    fn(text)
+                  } catch {
+                    /* subscriber fault isolation */
+                  }
+                })
+                return {
+                  ...prev,
+                  updatedAt: typeof data.timestamp === 'string' ? data.timestamp : prev.updatedAt,
+                  transcript_ai_summary: {
+                    status: 'ready',
+                    text: text.length > 0 ? text : null,
+                    updated_at: typeof data.timestamp === 'string' ? data.timestamp : new Date().toISOString(),
+                  },
+                }
+              }
               case 'alert.critical':
                 return applyCriticalAlertEvent(prev, data.payload, data.timestamp)
               case 'heartbeat': {
@@ -136,5 +182,11 @@ export function useTelemetryStream(): {
     }
   }, [wsUrl, initial])
 
-  return { telemetry, connectionState }
+  return {
+    telemetry,
+    connectionState,
+    requestRollingSummary,
+    subscribeRollingSummary,
+    requestCallerLocationRefresh,
+  }
 }
