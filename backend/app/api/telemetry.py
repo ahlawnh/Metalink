@@ -14,6 +14,7 @@ from app.schemas.telemetry import (
     Heartbeat,
     PipelineStatus,
     PipelineStatusUpdate,
+    RollingSummaryPayload,
     WebSocketEvent,
 )
 
@@ -87,10 +88,36 @@ async def telemetry_websocket(websocket: WebSocket, scenario: Optional[str] = No
         ),
     )
 
+    pending_summary_tasks: set[asyncio.Task[None]] = set()
+
+    def _discard_summary_task(task: asyncio.Task[None]) -> None:
+        pending_summary_tasks.discard(task)
+
+    async def run_requested_summary() -> None:
+        try:
+            from app.core.ingestion import telemetry_state
+            from app.services.summarizer import generate_rolling_summary
+
+            text = await generate_rolling_summary(telemetry_state.transcript_buffer)
+            await telemetry_manager.send_event(
+                websocket,
+                WebSocketEvent(
+                    event_type=EventType.TELEMETRY_SUMMARY_UPDATED,
+                    payload=RollingSummaryPayload(rolling_summary=text),
+                ),
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            print(f"request.summary task failed: {exc}")
+
     try:
         while True:
             try:
-                await asyncio.wait_for(websocket.receive_text(), timeout=settings.heartbeat_interval_seconds)
+                data = await asyncio.wait_for(
+                    websocket.receive_json(),
+                    timeout=settings.heartbeat_interval_seconds,
+                )
             except asyncio.TimeoutError:
                 sent = await telemetry_manager.send_event(
                     websocket,
@@ -103,9 +130,25 @@ async def telemetry_websocket(websocket: WebSocket, scenario: Optional[str] = No
                     ),
                 )
                 if not sent:
-                    return
+                    break
+                continue
+            except WebSocketDisconnect:
+                raise
+            except Exception as exc:
+                print(f"Telemetry WebSocket ignored invalid client message: {exc}")
+                continue
+
+            if isinstance(data, dict) and data.get("event_type") == "request.summary":
+                task = asyncio.create_task(run_requested_summary())
+                pending_summary_tasks.add(task)
+                task.add_done_callback(_discard_summary_task)
     except WebSocketDisconnect:
-        telemetry_manager.disconnect(websocket)
+        pass
     except Exception as exc:
         print(f"Telemetry WebSocket loop failed: {exc}")
+    finally:
+        for task in pending_summary_tasks:
+            task.cancel()
+        if pending_summary_tasks:
+            await asyncio.gather(*pending_summary_tasks, return_exceptions=True)
         telemetry_manager.disconnect(websocket)

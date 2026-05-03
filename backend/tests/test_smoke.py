@@ -50,6 +50,22 @@ def test_websocket_envelope_and_schema_version(client: TestClient) -> None:
         assert third["payload"]["pipeline_status"] == "mock"
 
 
+def test_websocket_request_summary(client: TestClient) -> None:
+    with client.websocket_connect("/api/ws/telemetry?scenario=normal_case") as ws:
+        _ = ws.receive_json()
+        _ = ws.receive_json()
+        _ = ws.receive_json()
+        ws.send_json({"event_type": "request.summary"})
+        while True:
+            msg = ws.receive_json()
+            if msg.get("event_type") == "telemetry.summary_updated":
+                assert msg["schema_version"] == "v2"
+                assert "rolling_summary" in msg["payload"]
+                assert isinstance(msg["payload"]["rolling_summary"], str)
+                assert len(msg["payload"]["rolling_summary"]) > 0
+                break
+
+
 @pytest.mark.skipif(
     os.getenv("STABILITY_TEST") != "1",
     reason="Set STABILITY_TEST=1 to run the 5-minute WebSocket stability check.",
@@ -68,6 +84,7 @@ def test_websocket_five_minute_stability(client: TestClient) -> None:
             assert msg["event_type"] in (
                 "heartbeat",
                 "telemetry.update",
+                "telemetry.summary_updated",
                 "alert.critical",
                 "pipeline.status",
             )

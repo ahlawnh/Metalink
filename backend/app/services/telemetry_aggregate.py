@@ -112,6 +112,7 @@ def build_telemetry_payload(
     *,
     state: TelemetryState,
     patient_status: str = "critical",
+    rolling_summary: str = "",
 ) -> dict[str, Any]:
     """
     Build a payload matching the team's JSON contract as closely as possible without depending
@@ -145,6 +146,7 @@ def build_telemetry_payload(
         "patient_position": state.latest_vision.get("patient_position", "unknown"),
         "cyanosis_detected": bool(state.latest_vision.get("cyanosis_detected", False)),
         "bystander_action": state.latest_vision.get("bystander_action", "unknown"),
+        "rolling_summary": rolling_summary,
     }
     stress = _bystander_stress_payload(state.transcript_buffer)
     if stress is not None:
@@ -157,7 +159,7 @@ async def publish_telemetry(state: TelemetryState) -> None:
     if broadcast_telemetry is None:
         return
 
-    payload = build_telemetry_payload(state=state)
+    payload = build_telemetry_payload(state=state, rolling_summary="")
     maybe_awaitable = broadcast_telemetry(payload)
     if asyncio.iscoroutine(maybe_awaitable):
         await maybe_awaitable
