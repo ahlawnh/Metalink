@@ -20,6 +20,7 @@ class EventType(str, Enum):
     ALERT_CRITICAL = "alert.critical"
     PIPELINE_STATUS = "pipeline.status"
     HEARTBEAT = "heartbeat"
+    CLIENT_PONG = "client.pong"
 
 
 class PipelineStatus(str, Enum):
@@ -172,6 +173,12 @@ class RollingSummaryPayload(BaseModel):
     rolling_summary: str = ""
 
 
+class ClientPongPayload(BaseModel):
+    """Echo for RTT measurement — responds to client JSON ``{\"event_type\":\"client.ping\",\"client_ts\":...}``."""
+
+    client_ts: int
+
+
 class WebSocketEvent(BaseModel):
     schema_version: Literal["v2"] = SCHEMA_VERSION
     event_type: EventType
@@ -182,4 +189,5 @@ class WebSocketEvent(BaseModel):
         CriticalAlert,
         Heartbeat,
         RollingSummaryPayload,
+        ClientPongPayload,
     ]

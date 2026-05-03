@@ -14,10 +14,12 @@ _IDENTITY_RE = re.compile(r"^[a-zA-Z0-9._@-]{1,128}$")
 
 
 class LiveKitTokenResponse(BaseModel):
-    """Credentials for a browser subscriber (operator) joining the configured room."""
+    """Credentials for the operator dashboard joining the configured room."""
 
     url: str = Field(description="WebSocket URL for the LiveKit server, e.g. wss://*.livekit.cloud")
-    token: str = Field(description="JWT access token (publish disabled at the client; operator is receive-only)")
+    token: str = Field(
+        description="JWT with subscribe + publish (microphone only; camera disabled in the client app)"
+    )
     room: str
     identity: str = Field(description="Participant identity embedded in the token")
 
@@ -40,7 +42,9 @@ def issue_operator_livekit_token(
     ),
 ) -> LiveKitTokenResponse:
     """
-    Mint a short-lived LiveKit JWT for the Metalink operator dashboard (subscriber-only).
+    Mint a short-lived LiveKit JWT for the Metalink operator dashboard.
+
+    Grants subscribe + **publish microphone** (no camera); the client keeps the camera track disabled.
 
     Requires ``LIVEKIT_URL``, ``LIVEKIT_API_KEY``, and ``LIVEKIT_API_SECRET`` on the server.
     """
@@ -63,7 +67,15 @@ def issue_operator_livekit_token(
         AccessToken(settings.livekit_api_key, settings.livekit_api_secret)
         .with_identity(op_identity)
         .with_name("Metalink operator")
-        .with_grants(VideoGrants(room_join=True, room=settings.livekit_room))
+        .with_grants(
+            VideoGrants(
+                room_join=True,
+                room=settings.livekit_room,
+                can_subscribe=True,
+                can_publish=True,
+                can_publish_sources=["microphone"],
+            )
+        )
         .to_jwt()
     )
 

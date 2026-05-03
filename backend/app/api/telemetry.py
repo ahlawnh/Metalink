@@ -10,6 +10,7 @@ from app.core.constants import SUPPORTED_MOCK_SCENARIOS
 from app.core.mock_telemetry import build_mock_telemetry, normalize_scenario
 from app.core.websocket_manager import telemetry_manager
 from app.schemas.telemetry import (
+    ClientPongPayload,
     EventType,
     Heartbeat,
     PipelineStatus,
@@ -146,7 +147,19 @@ async def telemetry_websocket(websocket: WebSocket, scenario: Optional[str] = No
                 print(f"Telemetry WebSocket ignored invalid client message: {exc}")
                 continue
 
-            if isinstance(data, dict) and data.get("event_type") == "request.summary":
+            if isinstance(data, dict) and data.get("event_type") == "client.ping":
+                try:
+                    client_ts = int(data.get("client_ts", 0))
+                except (TypeError, ValueError):
+                    client_ts = 0
+                await telemetry_manager.send_event(
+                    websocket,
+                    WebSocketEvent(
+                        event_type=EventType.CLIENT_PONG,
+                        payload=ClientPongPayload(client_ts=client_ts),
+                    ),
+                )
+            elif isinstance(data, dict) and data.get("event_type") == "request.summary":
                 task = asyncio.create_task(run_requested_summary())
                 pending_summary_tasks.add(task)
                 task.add_done_callback(_discard_summary_task)

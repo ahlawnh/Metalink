@@ -76,15 +76,50 @@ function snippetToTranscript(snippet: string, timestamp: string): TranscriptChun
   ]
 }
 
-function segmentsToTranscript(segments: BackendTranscriptSegment[]): TranscriptChunk[] {
+function segmentTimestampIso(segment: BackendTranscriptSegment, fallback: string): string {
+  const t = segment.timestamp as unknown
+  if (typeof t === 'string' && t.length > 0) return t
+  if (typeof t === 'number' && Number.isFinite(t)) return new Date(t).toISOString()
+  return fallback
+}
+
+function segmentsToTranscript(segments: BackendTranscriptSegment[], fallbackTime: string): TranscriptChunk[] {
   return segments
     .filter((segment) => segment.text.trim().length > 0)
     .map((segment, index) => ({
-      id: `tx-${segment.speaker}-${hashId(segment.text)}-${hashId(segment.timestamp)}-${index}`,
+      id: `tx-${segment.speaker}-${hashId(segment.text)}-${hashId(String(segment.timestamp))}-${index}`,
       speaker: segment.speaker,
       text: segment.text.trim(),
-      timestamp: segment.timestamp,
+      timestamp: segmentTimestampIso(segment, fallbackTime),
     }))
+}
+
+/** When only `transcript_snippet` updates: append deltas so oldest stays top, newest bottom. */
+function mergeTranscriptRolling(previous: TranscriptChunk[], snippet: string, now: string): TranscriptChunk[] {
+  const trimmed = snippet.trim()
+  if (!trimmed) return previous
+
+  const prevJoined = previous
+    .map((c) => c.text)
+    .join(' ')
+    .trim()
+  if (trimmed === prevJoined) return previous
+
+  if (prevJoined && trimmed.startsWith(prevJoined)) {
+    const delta = trimmed.slice(prevJoined.length).trim()
+    if (!delta) return previous
+    return [
+      ...previous,
+      {
+        id: `tx-live-${hashId(delta)}-${hashId(now)}`,
+        speaker: 'caller',
+        text: delta,
+        timestamp: now,
+      },
+    ]
+  }
+
+  return snippetToTranscript(trimmed, now)
 }
 
 function pipelineToVideoStatus(
@@ -151,16 +186,28 @@ export function applyTelemetryUpdate(
   }
   const respiratoryStatus = deriveRespiratoryStatus(fullPayload)
 
+  const prevHist = previous.respiratory.history_rr?.length
+    ? [...previous.respiratory.history_rr]
+    : typeof previous.respiratory.estimated_respiratory_rate === 'number' &&
+        Number.isFinite(previous.respiratory.estimated_respiratory_rate) &&
+        previous.respiratory.estimated_respiratory_rate > 0
+      ? [previous.respiratory.estimated_respiratory_rate]
+      : []
+  const history_rr = keepResp
+    ? previous.respiratory.history_rr ?? []
+    : typeof mergedRate === 'number' && Number.isFinite(mergedRate) && mergedRate > 0
+      ? [...prevHist, mergedRate].slice(-32)
+      : prevHist
+
   const segmentChunks = Array.isArray(payload.transcript_segments)
-    ? segmentsToTranscript(payload.transcript_segments)
+    ? segmentsToTranscript(payload.transcript_segments, now)
     : []
-  const snippetChunks = snippetToTranscript(fullPayload.transcript_snippet, now)
   const transcript = payload.clear_transcript
     ? []
     : segmentChunks.length > 0
       ? segmentChunks
-      : snippetChunks.length > 0
-        ? snippetChunks
+      : fullPayload.transcript_snippet.trim().length > 0
+        ? mergeTranscriptRolling(previous.transcript, fullPayload.transcript_snippet, now)
         : previous.transcript
 
   const loc = payload.caller_location
@@ -199,12 +246,13 @@ export function applyTelemetryUpdate(
       ? { status: 'idle', text: null, updated_at: now }
       : previous.transcript_ai_summary,
     respiratory: {
-      estimated_respiratory_rate: mergedRate,
+      estimated_respiratory_rate: typeof mergedRate === 'number' && !Number.isNaN(mergedRate) ? mergedRate : 0,
       respiratory_status: respiratoryStatus,
       confidence: keepResp
         ? previous.respiratory.confidence
         : Number(payload.resp_rate_estimate?.confidence ?? 0),
       source: pipelineStatus === 'live' ? 'ai' : 'mock',
+      history_rr,
     },
     hazards,
     transcript,
@@ -248,7 +296,6 @@ export function applyHeartbeat(
   connectedClients: number,
   envelopeTimestamp: string,
 ): DashboardTelemetryPayload {
-  // Bounded synthetic operator load from fan-out count — stable UX, no backend vitals yet.
   const bpm = Math.min(110, 68 + connectedClients * 6)
   return {
     ...previous,
@@ -272,6 +319,7 @@ export function applyPipelineStatus(
     respiratory: {
       ...previous.respiratory,
       source: pipelineStatus === 'live' ? 'ai' : 'mock',
+      history_rr: previous.respiratory.history_rr?.length ? previous.respiratory.history_rr : [],
     },
   }
 }

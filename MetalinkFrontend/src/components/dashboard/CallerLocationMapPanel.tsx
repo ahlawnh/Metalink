@@ -6,8 +6,6 @@ const MAP_CONTAINER_STYLE: { width: string; height: string } = { width: '100%', 
 
 interface CallerLocationMapPanelProps {
   location: CallerLocationTelemetry
-  onRefreshLocation: () => void
-  wsConnected: boolean
 }
 
 function hasValidCoords(location: CallerLocationTelemetry): boolean {
@@ -31,7 +29,13 @@ function GoogleMapEmbed({ center, accuracyM }: MapEmbedProps) {
     googleMapsApiKey: apiKey || '__MISSING__',
   })
 
+  const mapRef = useRef<google.maps.Map | null>(null)
   const [pulseR, setPulseR] = useState(52)
+
+  useEffect(() => {
+    if (!isLoaded || !mapRef.current) return
+    mapRef.current.panTo(center)
+  }, [center.lat, center.lng, isLoaded])
 
   useEffect(() => {
     if (!isLoaded) return
@@ -67,11 +71,17 @@ function GoogleMapEmbed({ center, accuracyM }: MapEmbedProps) {
     anchor: new g.Point(22, 22),
   }
 
+  const onMapLoad = (map: google.maps.Map) => {
+    mapRef.current = map
+    map.panTo(center)
+  }
+
   return (
     <GoogleMap
       mapContainerStyle={MAP_CONTAINER_STYLE}
       center={center}
       zoom={16}
+      onLoad={onMapLoad}
       options={{
         fullscreenControl: false,
         streetViewControl: false,
@@ -108,14 +118,7 @@ function GoogleMapEmbed({ center, accuracyM }: MapEmbedProps) {
   )
 }
 
-export default function CallerLocationMapPanel({
-  location,
-  onRefreshLocation,
-  wsConnected,
-}: CallerLocationMapPanelProps) {
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const lastUpdatedRef = useRef(location.updated_at)
-
+export default function CallerLocationMapPanel({ location }: CallerLocationMapPanelProps) {
   const hasCoords = hasValidCoords(location)
   const mapsKey = Boolean(import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim())
 
@@ -124,48 +127,11 @@ export default function CallerLocationMapPanel({
     return { lat: location.latitude, lng: location.longitude }
   }, [hasCoords, location.latitude, location.longitude])
 
-  const latLabel = hasCoords ? location.latitude.toFixed(5) : '—'
-  const lngLabel = hasCoords ? location.longitude.toFixed(5) : '—'
-
-  useEffect(() => {
-    if (!isRefreshing) {
-      lastUpdatedRef.current = location.updated_at
-      return
-    }
-    if (location.updated_at !== lastUpdatedRef.current) {
-      setIsRefreshing(false)
-      lastUpdatedRef.current = location.updated_at
-    }
-  }, [location.updated_at, isRefreshing])
-
-  useEffect(() => {
-    if (!isRefreshing) return
-    const id = window.setTimeout(() => setIsRefreshing(false), 8000)
-    return () => window.clearTimeout(id)
-  }, [isRefreshing])
-
-  const handleRefresh = () => {
-    if (!wsConnected || isRefreshing) return
-    setIsRefreshing(true)
-    onRefreshLocation()
-  }
-
   return (
     <section className="dash-card flex min-h-0 flex-1 flex-col p-4" aria-label="Caller location map">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="dash-label">Caller location</p>
-          <p className="mt-2 text-xl font-bold leading-snug text-[var(--dash-text-primary)]">{location.label}</p>
-        </div>
-        <button
-          type="button"
-          disabled={!wsConnected || isRefreshing}
-          onClick={handleRefresh}
-          title={wsConnected ? undefined : 'Connect to telemetry to refresh fused GPS'}
-          className="rounded-md bg-[var(--dash-surface-raised)] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--dash-text-primary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ring-white/[0.1] hover:bg-[color-mix(in_srgb,var(--dash-surface-raised)_90%,#fff)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00E5FF] disabled:pointer-events-none disabled:opacity-45"
-        >
-          {isRefreshing ? 'Refreshing…' : 'Refresh location'}
-        </button>
+      <div>
+        <p className="dash-label">Caller location</p>
+        <p className="mt-2 text-xl font-bold leading-snug text-[var(--dash-text-primary)]">{location.label}</p>
       </div>
 
       <div className="relative mt-4 min-h-[220px] flex-1 overflow-hidden rounded-lg bg-[var(--dash-bg)] ring-1 ring-white/[0.06] md:min-h-[280px]">
@@ -180,38 +146,11 @@ export default function CallerLocationMapPanel({
             </p>
           </div>
         )}
-
-        {hasCoords ? (
-          <div className="pointer-events-none absolute bottom-0 left-0 right-0 bg-[color-mix(in_srgb,var(--dash-bg)_78%,transparent)] px-3 py-2 backdrop-blur-md">
-            <div className="flex flex-wrap gap-x-6 gap-y-1 font-data text-[13px] font-bold tabular-nums text-[var(--dash-text-primary)]">
-              <span>
-                <span className="mr-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dash-text-secondary)]">
-                  Lat
-                </span>
-                {latLabel}
-              </span>
-              <span>
-                <span className="mr-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dash-text-secondary)]">
-                  Lng
-                </span>
-                {lngLabel}
-              </span>
-            </div>
-          </div>
-        ) : null}
       </div>
 
-      <dl className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-        <div className="dash-inset px-3 py-2">
-          <dt className="dash-label">Latitude</dt>
-          <dd className="mt-1 font-data text-lg font-bold tabular-nums text-[var(--dash-text-primary)]">{latLabel}</dd>
-        </div>
-        <div className="dash-inset px-3 py-2">
-          <dt className="dash-label">Longitude</dt>
-          <dd className="mt-1 font-data text-lg font-bold tabular-nums text-[var(--dash-text-primary)]">{lngLabel}</dd>
-        </div>
+      <dl className="mt-4 grid grid-cols-1 gap-3 text-sm">
         {typeof location.accuracy_m === 'number' ? (
-          <div className="dash-inset px-3 py-2 sm:col-span-2">
+          <div className="dash-inset px-3 py-2">
             <dt className="dash-label">Estimated accuracy</dt>
             <dd className="mt-1 font-data text-lg font-bold tabular-nums text-[var(--dash-text-primary)]">
               ± {Math.round(location.accuracy_m)} m
