@@ -1,7 +1,8 @@
 import type {
   BackendCriticalAlert,
-  BackendTelemetryUpdatePayload,
   BackendDetectedItem,
+  BackendHapticCue,
+  BackendTelemetryUpdatePayload,
   BackendTranscriptSegment,
 } from '@/types/ws'
 import type {
@@ -237,11 +238,29 @@ export function applyTelemetryUpdate(
         }
       : previous.patient_heart
 
+  let cpr_guidance = previous.cpr_guidance
+  if (payload.haptic_cue !== undefined && payload.haptic_cue !== null) {
+    const hc = payload.haptic_cue as BackendHapticCue
+    if (
+      hc.pattern === 'cpr_metronome' &&
+      hc.active &&
+      typeof hc.bpm === 'number' &&
+      Number.isFinite(hc.bpm) &&
+      hc.bpm >= 100 &&
+      hc.bpm <= 120
+    ) {
+      cpr_guidance = { active: true, bpm: Math.round(hc.bpm) }
+    } else {
+      cpr_guidance = { active: false, bpm: null }
+    }
+  }
+
   return {
     ...previous,
     updatedAt: now,
     caller_location,
     patient_heart,
+    cpr_guidance,
     transcript_ai_summary: payload.clear_transcript
       ? { status: 'idle', text: null, updated_at: now }
       : previous.transcript_ai_summary,

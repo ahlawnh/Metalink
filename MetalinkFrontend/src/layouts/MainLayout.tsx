@@ -6,8 +6,14 @@ import { useTelemetryStream } from '@/hooks/useTelemetryStream'
 import { cn } from '@/lib/utils'
 
 export function MainLayout() {
-  const { telemetry, connectionState, wsLatencyMs, requestRollingSummary, subscribeRollingSummary } =
-    useTelemetryStream()
+  const {
+    telemetry,
+    connectionState,
+    wsLatencyMs,
+    requestRollingSummary,
+    subscribeRollingSummary,
+    setCprGuidance,
+  } = useTelemetryStream()
 
   const connectionTone =
     connectionState === 'connected'
@@ -69,6 +75,9 @@ export function MainLayout() {
         <VitalsTelemetryCards
           patient={telemetry.patient_heart}
           respiratory={telemetry.respiratory}
+          cprGuidance={telemetry.cpr_guidance}
+          onCprGuidance={setCprGuidance}
+          wsConnected={connectionState === 'connected'}
           telemetryCueRevision={Math.floor(Date.parse(telemetry.updatedAt) / 1000) || 0}
         />
         <TranscriptSummary

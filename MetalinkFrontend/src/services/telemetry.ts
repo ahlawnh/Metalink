@@ -123,5 +123,12 @@ export function normalizeTelemetryPayload(input: unknown): DashboardTelemetryPay
         typeof data.caller_location?.updated_at === 'string' ? data.caller_location.updated_at : undefined,
     },
     patient_heart: normalizePatientHeart(data),
+    cpr_guidance: {
+      active: Boolean(data.cpr_guidance?.active),
+      bpm:
+        typeof data.cpr_guidance?.bpm === 'number' && Number.isFinite(data.cpr_guidance.bpm)
+          ? data.cpr_guidance.bpm
+          : null,
+    },
   }
 }

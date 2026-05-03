@@ -1,8 +1,14 @@
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSmoothedBpm } from '@/hooks/useSmoothedBpm'
 import { useSmoothedRr } from '@/hooks/useSmoothedRr'
 import { cn } from '@/lib/utils'
-import type { PatientCardiacMode, PatientHeartTelemetry, RespiratoryTelemetry, RespiratoryStatus } from '@/types/dashboard'
+import type {
+  CprGuidanceTelemetry,
+  PatientCardiacMode,
+  PatientHeartTelemetry,
+  RespiratoryTelemetry,
+  RespiratoryStatus,
+} from '@/types/dashboard'
 
 function hasHeartRateData(p: PatientHeartTelemetry): boolean {
   if (p.heart_rate_bpm <= 0) return false
@@ -19,6 +25,9 @@ function hasRespiratoryData(r: RespiratoryTelemetry): boolean {
 interface VitalsTelemetryCardsProps {
   patient: PatientHeartTelemetry
   respiratory: RespiratoryTelemetry
+  cprGuidance: CprGuidanceTelemetry
+  onCprGuidance: (active: boolean, bpm: number | null) => void
+  wsConnected: boolean
   /** Changes when telemetry snapshot updates (e.g. WS `updatedAt`) — nudges smoothed digits. */
   telemetryCueRevision?: number
 }
@@ -90,10 +99,132 @@ function presentationFor(mode: PatientCardiacMode): { bpmClass: string; strokeCl
 const telemetrySurface =
   'rounded-xl bg-[#1E1E1E] p-2 shadow-[0_4px_24px_rgba(0,0,0,0.55)] sm:p-2'
 
+const cprPanelBtn =
+  'rounded-md bg-[#2A2A2A] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--dash-text-primary)] ring-1 ring-white/[0.08] hover:bg-[#333] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dash-accent)] disabled:cursor-not-allowed disabled:opacity-45'
+
+/** Main “CPR tempo” opener — high-contrast accent so it reads as primary action. */
+const cprTriggerBtn =
+  'rounded-md bg-cyan-500 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#0d1117] shadow-[0_0_14px_rgba(34,211,238,0.45)] ring-1 ring-cyan-300/90 hover:bg-cyan-400 hover:shadow-[0_0_18px_rgba(103,232,249,0.55)] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none'
+
+const cprStopBtn =
+  'rounded-md bg-red-600 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-white ring-1 ring-red-500/60 hover:bg-red-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:cursor-not-allowed disabled:opacity-45'
+
+function CprTempoControl({
+  cprGuidance,
+  onCprGuidance,
+  wsConnected,
+}: {
+  cprGuidance: CprGuidanceTelemetry
+  onCprGuidance: (active: boolean, bpm: number | null) => void
+  wsConnected: boolean
+}) {
+  const [targetBpm, setTargetBpm] = useState(110)
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (cprGuidance.active && typeof cprGuidance.bpm === 'number') {
+      setTargetBpm(cprGuidance.bpm)
+    }
+  }, [cprGuidance.active, cprGuidance.bpm])
+
+  const live = cprGuidance.active && typeof cprGuidance.bpm === 'number'
+  const disabled = !wsConnected
+
+  return (
+    <div className="relative flex items-center gap-1.5">
+      {live ? (
+        <span
+          className="inline-flex items-center gap-1.5 rounded-full border border-red-500/50 bg-red-950/50 px-2 py-0.5 font-data text-[9px] font-semibold uppercase tracking-[0.1em] text-red-200"
+          title="CPR tempo is broadcasting to the caller device"
+        >
+          <span className="size-1.5 animate-pulse rounded-full bg-red-400" />
+          CPR {cprGuidance.bpm} BPM
+        </span>
+      ) : null}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={cprTriggerBtn}
+        disabled={disabled}
+        title={disabled ? 'Connect to telemetry to send CPR tempo' : 'CPR compression tempo for caller'}
+        aria-expanded={open}
+      >
+        CPR tempo
+      </button>
+      {open ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-[80] cursor-default bg-transparent"
+            aria-label="Close CPR tempo panel"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute right-0 top-full z-[90] mt-1 w-[min(100vw-2rem,17rem)] rounded-lg border border-white/[0.08] bg-[var(--dash-surface-raised)] p-3 shadow-xl ring-1 ring-black/40">
+            <p className="dash-label pb-2 normal-case">Compression tempo (100–120 BPM)</p>
+            <label className="flex flex-col gap-1">
+              <span className="font-data text-xl font-bold tabular-nums text-[var(--dash-text-primary)]">
+                {targetBpm}{' '}
+                <span className="text-[11px] font-semibold text-[var(--dash-text-secondary)]">BPM</span>
+              </span>
+              <input
+                type="range"
+                min={100}
+                max={120}
+                step={1}
+                value={targetBpm}
+                onChange={(e) => setTargetBpm(Number(e.target.value))}
+                disabled={live}
+                className="w-full accent-[var(--dash-accent)] disabled:opacity-50"
+              />
+              <span className="flex justify-between font-data text-[10px] text-[var(--dash-text-secondary)]">
+                <span>100</span>
+                <span>120</span>
+              </span>
+            </label>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {!live ? (
+                <button
+                  type="button"
+                  className={cn(cprPanelBtn, 'bg-[color-mix(in_srgb,#FF174418%,var(--dash-bg))]')}
+                  disabled={disabled}
+                  onClick={() => {
+                    onCprGuidance(true, targetBpm)
+                    setOpen(false)
+                  }}
+                >
+                  Start guidance
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className={cprStopBtn}
+                  disabled={disabled}
+                  onClick={() => {
+                    onCprGuidance(false, null)
+                    setOpen(false)
+                  }}
+                >
+                  Stop
+                </button>
+              )}
+            </div>
+            <p className="mt-2 text-[10px] leading-snug text-[var(--dash-text-secondary)]">
+              Sends CPR tempo to the backend so the caller app can align prompts and feedback with compressions.
+            </p>
+          </div>
+        </>
+      ) : null}
+    </div>
+  )
+}
+
 /** Twin vitals panels — HR / RR live from WebSocket telemetry; monospace numerics for stable layout. */
 export default function VitalsTelemetryCards({
   patient,
   respiratory,
+  cprGuidance,
+  onCprGuidance,
+  wsConnected,
   telemetryCueRevision = 0,
 }: VitalsTelemetryCardsProps) {
   const hrPresent = hasHeartRateData(patient)
@@ -123,7 +254,10 @@ export default function VitalsTelemetryCards({
   return (
     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
       <section className={telemetrySurface} aria-label="Patient heart rate">
-        <p className="dash-label px-1 pb-1">Heart rate</p>
+        <div className="flex flex-wrap items-start justify-between gap-2 px-1 pb-1">
+          <p className="dash-label shrink-0">Heart rate</p>
+          <CprTempoControl cprGuidance={cprGuidance} onCprGuidance={onCprGuidance} wsConnected={wsConnected} />
+        </div>
         <div className="rounded-lg px-1 pt-1">
           <div className="flex flex-wrap items-end gap-2">
             {hrPresent ? (

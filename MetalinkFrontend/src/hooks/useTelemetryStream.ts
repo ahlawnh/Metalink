@@ -57,6 +57,8 @@ export function useTelemetryStream(): {
   subscribeRollingSummary: (fn: (text: string) => void) => () => void
   /** Ask backend for a fresh caller GPS fix — replies with `telemetry.update` including `caller_location` when supported. */
   requestCallerLocationRefresh: () => void
+  /** Broadcast CPR compression tempo (100–120 BPM) to all telemetry subscribers via `haptic_cue` / caller PWA. */
+  setCprGuidance: (active: boolean, bpm: number | null) => void
 } {
   const initial = useMemo(() => normalizeTelemetryPayload(fallbackTelemetry), [])
   const [telemetry, setTelemetry] = useState<DashboardTelemetryPayload>(initial)
@@ -79,6 +81,18 @@ export function useTelemetryStream(): {
     const socket = socketRef.current
     if (!socket || socket.readyState !== WebSocket.OPEN) return
     socket.send(JSON.stringify({ event_type: 'request.caller_location' }))
+  }, [])
+
+  const setCprGuidance = useCallback((active: boolean, bpm: number | null) => {
+    const socket = socketRef.current
+    if (!socket || socket.readyState !== WebSocket.OPEN) return
+    socket.send(
+      JSON.stringify({
+        event_type: 'dispatcher.cpr_guidance',
+        active,
+        bpm: active && typeof bpm === 'number' ? bpm : null,
+      }),
+    )
   }, [])
 
   const subscribeRollingSummary = useCallback((fn: (text: string) => void) => {
@@ -259,5 +273,6 @@ export function useTelemetryStream(): {
     requestRollingSummary,
     subscribeRollingSummary,
     requestCallerLocationRefresh,
+    setCprGuidance,
   }
 }

@@ -127,6 +127,9 @@ export default function CallerLocationMapPanel({ location }: CallerLocationMapPa
     return { lat: location.latitude, lng: location.longitude }
   }, [hasCoords, location.latitude, location.longitude])
 
+  const latLabel = hasCoords ? location.latitude.toFixed(5) : '—'
+  const lngLabel = hasCoords ? location.longitude.toFixed(5) : '—'
+
   return (
     <section className="dash-card flex min-h-0 flex-1 flex-col p-4" aria-label="Caller location map">
       <div>
@@ -146,11 +149,38 @@ export default function CallerLocationMapPanel({ location }: CallerLocationMapPa
             </p>
           </div>
         )}
+
+        {hasCoords ? (
+          <div className="pointer-events-none absolute bottom-0 left-0 right-0 bg-[color-mix(in_srgb,var(--dash-bg)_78%,transparent)] px-3 py-2 backdrop-blur-md">
+            <div className="flex flex-wrap gap-x-6 gap-y-1 font-data text-[13px] font-bold tabular-nums text-[var(--dash-text-primary)]">
+              <span>
+                <span className="mr-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dash-text-secondary)]">
+                  Lat
+                </span>
+                {latLabel}
+              </span>
+              <span>
+                <span className="mr-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dash-text-secondary)]">
+                  Lng
+                </span>
+                {lngLabel}
+              </span>
+            </div>
+          </div>
+        ) : null}
       </div>
 
-      <dl className="mt-4 grid grid-cols-1 gap-3 text-sm">
+      <dl className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+        <div className="dash-inset px-3 py-2">
+          <dt className="dash-label">Latitude</dt>
+          <dd className="mt-1 font-data text-lg font-bold tabular-nums text-[var(--dash-text-primary)]">{latLabel}</dd>
+        </div>
+        <div className="dash-inset px-3 py-2">
+          <dt className="dash-label">Longitude</dt>
+          <dd className="mt-1 font-data text-lg font-bold tabular-nums text-[var(--dash-text-primary)]">{lngLabel}</dd>
+        </div>
         {typeof location.accuracy_m === 'number' ? (
-          <div className="dash-inset px-3 py-2">
+          <div className="dash-inset px-3 py-2 sm:col-span-2">
             <dt className="dash-label">Estimated accuracy</dt>
             <dd className="mt-1 font-data text-lg font-bold tabular-nums text-[var(--dash-text-primary)]">
               ± {Math.round(location.accuracy_m)} m

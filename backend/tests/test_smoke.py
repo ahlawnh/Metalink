@@ -72,6 +72,35 @@ def test_websocket_request_summary(client: TestClient) -> None:
                 break
 
 
+def test_websocket_dispatcher_cpr_guidance(client: TestClient) -> None:
+    """Dispatcher broadcast must reach other subscribers with `haptic_cue` (CPR tempo)."""
+    with client.websocket_connect("/api/ws/telemetry?scenario=normal_case") as operator:
+        with client.websocket_connect("/api/ws/telemetry?scenario=normal_case") as caller:
+            for _ in range(3):
+                operator.receive_json()
+            for _ in range(3):
+                caller.receive_json()
+            # Use 115 BPM so we do not collide with mock snapshot metronome at 110 when sequence % 5 == 0.
+            operator.send_json({"event_type": "dispatcher.cpr_guidance", "active": True, "bpm": 115})
+            while True:
+                msg = caller.receive_json()
+                if msg.get("event_type") != "telemetry.update":
+                    continue
+                hc = (msg.get("payload") or {}).get("haptic_cue")
+                if isinstance(hc, dict) and hc.get("bpm") == 115:
+                    assert hc.get("pattern") == "cpr_metronome"
+                    assert hc.get("active") is True
+                    break
+            operator.send_json({"event_type": "dispatcher.cpr_guidance", "active": False})
+            while True:
+                msg = caller.receive_json()
+                if msg.get("event_type") != "telemetry.update":
+                    continue
+                hc = (msg.get("payload") or {}).get("haptic_cue")
+                if isinstance(hc, dict) and hc.get("active") is False and hc.get("pattern") == "none":
+                    return
+
+
 @pytest.mark.skipif(
     os.getenv("STABILITY_TEST") != "1",
     reason="Set STABILITY_TEST=1 to run the 5-minute WebSocket stability check.",

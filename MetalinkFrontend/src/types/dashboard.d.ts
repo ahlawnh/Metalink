@@ -86,6 +86,12 @@ export interface CallerLocationTelemetry {
   updated_at?: string
 }
 
+/** Dispatcher-driven CPR compression metronome (100–120 BPM), echoed via WS `haptic_cue` for the caller PWA. */
+export interface CprGuidanceTelemetry {
+  active: boolean
+  bpm: number | null
+}
+
 export interface DashboardTelemetryPayload {
   schemaVersion: string
   updatedAt: string
@@ -98,4 +104,6 @@ export interface DashboardTelemetryPayload {
   operator: OperatorTelemetry
   caller_location: CallerLocationTelemetry
   patient_heart: PatientHeartTelemetry
+  /** Mirrors backend `TelemetryUpdate.haptic_cue` when pattern is `cpr_metronome`. */
+  cpr_guidance: CprGuidanceTelemetry
 }
