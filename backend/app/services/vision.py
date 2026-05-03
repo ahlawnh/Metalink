@@ -121,8 +121,8 @@ async def analyze_frame_with_gpt54(
     logger.info(banner)
     print(banner, flush=True)
 
-    # NOTE: We keep the request shape intentionally simple to avoid fighting SDK/version
-    # differences during a hackathon. If the SDK changes, you update only this function.
+    # NOTE: We keep the request shape intentionally simple. Do not pass response_format here:
+    # some openai SDK versions' AsyncResponses.create() reject that kwarg (summarizer omits it too).
     try:
         resp = await client.responses.create(
             model=model,
@@ -139,8 +139,6 @@ async def analyze_frame_with_gpt54(
                     ],
                 },
             ],
-            # Try to force JSON. If the SDK/model doesn't support it, we'll fall back to parsing.
-            response_format={"type": "json_object"},
         )
     except Exception:
         logger.exception("[vision-debug] OpenAI responses.create failed model=%r", model)
