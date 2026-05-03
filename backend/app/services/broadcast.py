@@ -123,13 +123,16 @@ def _transcript_segments(raw: Any) -> list[TranscriptSegment]:
         if not isinstance(item, dict):
             continue
         try:
+            original = item.get("original_text")
             segments.append(
                 TranscriptSegment(
+                    segment_id=item.get("segment_id") or None,
                     speaker=item.get("speaker"),
                     text=str(item.get("text") or "").strip(),
                     timestamp=item.get("timestamp"),
                     is_final=bool(item.get("is_final", True)),
                     confidence=_confidence(item.get("confidence"), default=0.0),
+                    original_text=str(original).strip() if original else None,
                 )
             )
         except Exception:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import re
 import time
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -14,6 +15,8 @@ def _now_iso() -> str:
 
 BREATHE_WINDOW_S = 60.0
 TRANSCRIPT_SEGMENT_LIMIT = 40
+HAZARD_CONFIRM_THRESHOLD = 2
+HAZARD_CONFIDENCE_FLOOR = 0.65
 
 # Lightweight transcript hints (hackathon heuristic; not clinical diagnosis).
 AGONAL_PATTERNS: list[tuple[re.Pattern[str], str]] = [
@@ -36,6 +39,34 @@ class TelemetryState:
     last_breathe_timestamps_s: list[float] = field(default_factory=list)
     # Set True when bystander ends call — stops append_transcript_segment until session/start.
     transcript_ingest_paused: bool = False
+    # Tracks consecutive-frame detection counts per hazard type for consistency gating.
+    hazard_candidate_counts: dict[str, int] = field(default_factory=dict)
+
+
+def gate_hazards(state: TelemetryState, new_hazards: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Multi-frame hazard consistency gate.
+
+    - Drops hazards below HAZARD_CONFIDENCE_FLOOR immediately.
+    - Increments per-type counters for hazards seen this frame; decays types not seen.
+    - Only returns hazards whose type has been seen >= HAZARD_CONFIRM_THRESHOLD consecutive frames.
+    """
+    # Apply confidence floor first — blurry-frame low-confidence detections never accumulate.
+    candidates = [h for h in new_hazards if float(h.get("confidence", 0)) >= HAZARD_CONFIDENCE_FLOOR]
+
+    seen_types = {h.get("type", "") for h in candidates if h.get("type")}
+
+    # Increment counters for types present this frame.
+    for h_type in seen_types:
+        state.hazard_candidate_counts[h_type] = state.hazard_candidate_counts.get(h_type, 0) + 1
+
+    # Decay (but don't remove) types not seen this frame so a brief occlusion doesn't wipe them.
+    for h_type in list(state.hazard_candidate_counts):
+        if h_type not in seen_types:
+            state.hazard_candidate_counts[h_type] = max(0, state.hazard_candidate_counts[h_type] - 1)
+
+    confirmed_types = {t for t, c in state.hazard_candidate_counts.items() if c >= HAZARD_CONFIRM_THRESHOLD}
+    return [h for h in candidates if h.get("type", "") in confirmed_types]
 
 
 def record_transcript_side_effects(state: TelemetryState, *, text: str, is_final: bool) -> None:
@@ -120,6 +151,7 @@ def append_transcript_segment(
     timestamp: Optional[float] = None,
     is_final: bool = True,
     confidence: float = 0.0,
+    original_text: Optional[str] = None,
 ) -> None:
     if state.transcript_ingest_paused:
         return
@@ -129,19 +161,43 @@ def append_transcript_segment(
 
     safe_speaker = speaker if speaker in {"caller", "dispatcher"} else "caller"
     ts = timestamp if isinstance(timestamp, (int, float)) else time.time()
-    state.transcript_segments.append(
-        {
-            "speaker": safe_speaker,
-            "text": trimmed,
-            "timestamp": datetime.fromtimestamp(ts, timezone.utc).isoformat().replace("+00:00", "Z"),
-            "is_final": bool(is_final),
-            "confidence": max(0.0, min(1.0, float(confidence or 0.0))),
-        }
-    )
+    segment: dict[str, Any] = {
+        "segment_id": uuid.uuid4().hex[:12],
+        "speaker": safe_speaker,
+        "text": trimmed,
+        "timestamp": datetime.fromtimestamp(ts, timezone.utc).isoformat().replace("+00:00", "Z"),
+        "is_final": bool(is_final),
+        "confidence": max(0.0, min(1.0, float(confidence or 0.0))),
+    }
+    if original_text and original_text.strip() and original_text.strip() != trimmed:
+        segment["original_text"] = original_text.strip()
+    state.transcript_segments.append(segment)
     state.transcript_segments = state.transcript_segments[-TRANSCRIPT_SEGMENT_LIMIT:]
     state.transcript_buffer = " ".join(
         f"{segment['speaker'].title()}: {segment['text']}" for segment in state.transcript_segments
     )
+
+
+def patch_segment_translation(
+    state: TelemetryState,
+    *,
+    segment_id: str,
+    translated_text: str,
+    original_text: str,
+) -> bool:
+    """
+    Find a segment by its id and update it with the translated text in-place.
+    Returns True if the segment was found and patched.
+    """
+    for seg in state.transcript_segments:
+        if seg.get("segment_id") == segment_id:
+            seg["original_text"] = original_text.strip()
+            seg["text"] = translated_text.strip()
+            state.transcript_buffer = " ".join(
+                f"{s['speaker'].title()}: {s['text']}" for s in state.transcript_segments
+            )
+            return True
+    return False
 
 
 def clear_transcript_ingest_state(state: TelemetryState) -> None:

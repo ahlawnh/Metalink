@@ -123,11 +123,14 @@ class CallerLocationSnapshot(BaseModel):
 class TranscriptSegment(BaseModel):
     """Speaker-labeled transcript item emitted from LiveKit audio ingestion."""
 
+    segment_id: Optional[str] = None
     speaker: Literal["caller", "dispatcher"]
     text: str = Field(..., min_length=1)
     timestamp: datetime = Field(default_factory=utc_now)
     is_final: bool = True
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    # Non-English original preserved when the display text has been translated to English.
+    original_text: Optional[str] = None
 
 
 class TelemetryUpdate(BaseModel):
