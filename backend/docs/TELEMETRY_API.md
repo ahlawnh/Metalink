@@ -111,6 +111,10 @@ Never commit `.env`. Use `.env.example` as a template.
    - A **`dict`** shaped like `build_telemetry_payload()` (hazards, vitals, transcription_buffer, ai_dispatcher_alert, optional V3 keys), or
    - A **`TelemetryUpdate`** instance.
 
+**Respiratory rate:** `vitals.estimated_respiratory_rate` is derived in **`telemetry_aggregate`** from final transcript chunks containing the word **“breathe”** (rolling window), not from a single vision frame. Vision contributes **`chest_rise_detected`** and hazards only.
+
+**Bystander stress:** When the rolling transcript matches panic heuristics, `build_telemetry_payload()` may set **`bystander_stress`** (`critical_panic` or `elevated_distress`) for the broadcaster.
+
 ### Optional `dict` keys (mapped in `broadcast.py`)
 
 - `bystander_stress`: `{ "score", "label"?, "confidence"? }`

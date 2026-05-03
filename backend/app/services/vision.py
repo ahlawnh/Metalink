@@ -58,6 +58,7 @@ Rules:
 - If the frame is too blurry/dark/occluded, return empty hazards and set low-confidence.
 - Never identify a person. No age, gender, race, identity. Do not speculate.
 - Time budget: optimize for speed and minimal tokens.
+- Do NOT estimate breaths-per-minute or any numeric respiratory rate from a single frame; that is computed elsewhere from audio. Only output chest_rise_visible as a boolean visual cue.
 
 Schema (exact):
 {
@@ -68,7 +69,6 @@ Schema (exact):
   "cyanosis_detected": true,
   "bystander_action": "cpr|narcan_present|none|unknown",
   "chest_rise_visible": true,
-  "estimated_respiratory_rate": 0,
   "ai_dispatcher_alert": "string"
 }
 """
@@ -138,8 +138,9 @@ async def analyze_frame_with_gpt54(
     data = json.loads(text)
 
     hazards = data.get("hazards") or []
+    # RR is not taken from vision (single frame); telemetry_aggregate fills RR from "breathe" cadence.
     vitals = {
-        "estimated_respiratory_rate": int(data.get("estimated_respiratory_rate") or 0),
+        "estimated_respiratory_rate": 0,
         "chest_rise_detected": bool(data.get("chest_rise_visible") or False),
     }
     alert = str(data.get("ai_dispatcher_alert") or "No obvious scene hazards detected.")
