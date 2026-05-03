@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import CallerLocationMapPanel from '@/components/dashboard/CallerLocationMapPanel'
 import DeployVideoCallPanel from '@/components/dashboard/DeployVideoCallPanel'
+import DispatchPanel from '@/components/dashboard/DispatchPanel'
 import HazardList from '@/components/dashboard/HazardList'
 import SystemAlertsPanel from '@/components/dashboard/SystemAlertsPanel'
 import VitalsTelemetryCards from '@/components/dashboard/VitalsTelemetryCards'
@@ -156,6 +157,7 @@ export function MainLayout() {
             telemetryCueRevision={Math.floor(Date.parse(telemetry.updatedAt) / 1000) || 0}
           />
           <SystemAlertsPanel alerts={telemetry.systemAlerts} />
+          <DispatchPanel hazards={telemetry.hazards} cprActive={telemetry.cpr_guidance.active} />
         </aside>
 
         {/* Left drag handle */}
