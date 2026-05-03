@@ -9,7 +9,7 @@ import type {
 } from "@/lib/incidentTelemetry";
 import { INCIDENT_TELEMETRY_SCHEMA_VERSION } from "@/lib/incidentTelemetry";
 
-const FLUSH_MS = 5_000;
+const FLUSH_MS = 1_500;
 const STORAGE_KEY = "metalink_last_telemetry";
 
 type Args = {
