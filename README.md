@@ -8,7 +8,7 @@ Setup, run commands, env vars, and WebSocket URL for the dispatcher dashboard ar
 
 - **`frontend/`** — Dispatcher dashboard (React + Vite + TypeScript + Tailwind).
 - **`backend/`** — FastAPI telemetry / WebSocket service.
-- **`metalink_ios/`** (if present) — Native experiments; tactical hybrid demo uses browser/PWA flows per team plan.
+- **`ios/`** (if present) — Native experiments; tactical hybrid demo uses browser/PWA flows per team plan.
 
 ## Frontend quick start
 
