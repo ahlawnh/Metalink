@@ -1,6 +1,8 @@
 import Draggable from 'react-draggable'
 import { ConnectionState } from 'livekit-client'
+import type { ReactElement } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useLiveKitCallerVideo } from '@/hooks/useLiveKitCallerVideo'
 import { cn } from '@/lib/utils'
 import type { VideoTelemetry } from '@/types/dashboard'
@@ -8,6 +10,50 @@ import type { VideoTelemetry } from '@/types/dashboard'
 const FALLBACK_CLIP = 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4'
 const MUTED_STATUS_CHIP =
   'rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 font-data text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--dash-text-secondary)]'
+
+/** Pop-out must render under `document.body` so dashboard `overflow-hidden` does not clip it while dragging. */
+/** Fixed anchor only — react-draggable applies `transform` to its child; `fixed` + `transform` on one node breaks layout in Chromium/WebKit. */
+const FLOATING_POPOUT_ANCHOR_CLASSES =
+  'pointer-events-auto fixed left-[min(8vw,48px)] top-[min(14vh,120px)] z-[99999]'
+/** Inner shell (gets translate). Grid rows reserve space for the video below the drag header. */
+const FLOATING_POPOUT_SHELL_CLASSES =
+  'relative box-border grid min-h-0 h-[420px] max-h-[92vh] min-w-[280px] max-w-[min(96vw,920px)] w-[min(440px,calc(100vw-24px))] grid-rows-[auto_minmax(240px,1fr)] gap-2 cursor-grab resize overflow-hidden rounded-xl shadow-[0_28px_90px_rgba(0,0,0,0.72)] ring-2 ring-[color-mix(in_srgb,#00E5FF_22%,transparent)] active:cursor-grabbing'
+
+function DraggableVideoWrap({
+  floating,
+  dragNodeRef,
+  dragPos,
+  setDragPos,
+  children,
+}: {
+  floating: boolean
+  dragNodeRef: React.RefObject<HTMLElement | null>
+  dragPos: { x: number; y: number }
+  setDragPos: (p: { x: number; y: number }) => void
+  children: ReactElement
+}) {
+  const draggableTree = (
+    <Draggable
+      nodeRef={dragNodeRef}
+      disabled={!floating}
+      handle=".video-drag-handle"
+      cancel="button"
+      position={floating ? dragPos : { x: 0, y: 0 }}
+      onDrag={(_, data) => {
+        if (floating) setDragPos({ x: data.x, y: data.y })
+      }}
+      onStop={(_, data) => {
+        if (floating) setDragPos({ x: data.x, y: data.y })
+      }}
+    >
+      {children}
+    </Draggable>
+  )
+
+  if (!floating) return draggableTree
+  if (typeof document === 'undefined') return null
+  return createPortal(<div className={FLOATING_POPOUT_ANCHOR_CLASSES}>{draggableTree}</div>, document.body)
+}
 
 /** Use LiveKit feed when static URL+JWT are set, or when the Metalink API can mint a token (`VITE_TELEMETRY_API_ORIGIN`). */
 function shouldUseLiveKit(): boolean {
@@ -36,7 +82,7 @@ function FallbackTelemetryVideo({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const shellRef = useRef<HTMLDivElement>(null)
-  const dragNodeRef = useRef<HTMLDivElement>(null)
+  const dragNodeRef = useRef<HTMLElement>(null)
 
   const [isPlaying, setIsPlaying] = useState(true)
   const [isMuted, setIsMuted] = useState(true)
@@ -175,12 +221,12 @@ function FallbackTelemetryVideo({
       ref={shellRef}
       className={cn(
         'dash-inset relative w-full overflow-hidden bg-[var(--dash-bg)]',
-        fillHeight ? 'min-h-0 flex-1' : 'aspect-video',
+        floating ? 'min-h-0 h-full' : fillHeight ? 'min-h-0 flex-1' : 'aspect-video',
       )}
     >
       <video
         ref={videoRef}
-        className="h-full w-full object-cover"
+        className={cn('h-full w-full object-cover', floating && 'min-h-[200px]')}
         src={effectiveSrc}
         poster={posterUrl ?? undefined}
         autoPlay
@@ -243,18 +289,17 @@ function FallbackTelemetryVideo({
       className={cn(
         'dash-card w-full p-3',
         fillHeight && !floating && 'flex min-h-0 flex-1 flex-col',
-        floating &&
-          'fixed left-[min(8vw,48px)] top-[min(14vh,120px)] z-[920] w-[min(440px,calc(100vw-24px))] cursor-grab shadow-[0_28px_90px_rgba(0,0,0,0.72)] ring-2 ring-[color-mix(in_srgb,#00E5FF_22%,transparent)] active:cursor-grabbing',
+        floating && FLOATING_POPOUT_SHELL_CLASSES,
       )}
     >
       <div
         className={cn(
-          'video-drag-handle mb-2 flex cursor-grab items-center gap-2 rounded-md bg-[var(--dash-surface-raised)] px-2 py-1.5 ring-1 ring-white/[0.08] active:cursor-grabbing',
-          !floating && 'hidden',
+          'video-drag-handle flex shrink-0 cursor-grab items-center gap-2 rounded-md bg-[var(--dash-surface-raised)] px-2 py-1.5 ring-1 ring-white/[0.08] active:cursor-grabbing',
+          floating ? '' : 'mb-2 hidden',
         )}
       >
         <span className="dash-label normal-case tracking-normal text-[var(--dash-text-secondary)]">
-          Floating feed · drag header
+          Floating feed · drag header · resize corner
         </span>
         <button
           type="button"
@@ -285,21 +330,9 @@ function FallbackTelemetryVideo({
         </div>
       ) : null}
 
-      <Draggable
-        nodeRef={dragNodeRef}
-        disabled={!floating}
-        handle=".video-drag-handle"
-        cancel="button"
-        position={floating ? dragPos : { x: 0, y: 0 }}
-        onDrag={(_, data) => {
-          if (floating) setDragPos({ x: data.x, y: data.y })
-        }}
-        onStop={(_, data) => {
-          if (floating) setDragPos({ x: data.x, y: data.y })
-        }}
-      >
+      <DraggableVideoWrap floating={floating} dragNodeRef={dragNodeRef} dragPos={dragPos} setDragPos={setDragPos}>
         {cardBody}
-      </Draggable>
+      </DraggableVideoWrap>
     </>
   )
 }
@@ -319,7 +352,7 @@ function LiveKitCallerVideo({
   const videoRef = useRef<HTMLVideoElement>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
   const shellRef = useRef<HTMLDivElement>(null)
-  const dragNodeRef = useRef<HTMLDivElement>(null)
+  const dragNodeRef = useRef<HTMLElement>(null)
 
   const {
     connectionState,
@@ -527,7 +560,7 @@ function LiveKitCallerVideo({
       ref={shellRef}
       className={cn(
         'dash-inset relative w-full overflow-hidden bg-[var(--dash-bg)]',
-        fillHeight ? 'min-h-0 flex-1' : 'aspect-video',
+        floating ? 'min-h-0 h-full' : fillHeight ? 'min-h-0 flex-1' : 'aspect-video',
       )}
     >
       {/*
@@ -535,7 +568,7 @@ function LiveKitCallerVideo({
       */}
       <video
         ref={videoRef}
-        className="h-full w-full object-cover"
+        className={cn('h-full w-full object-cover', floating && 'min-h-[200px]')}
         poster={posterUrl ?? undefined}
         muted
         playsInline
@@ -688,18 +721,17 @@ function LiveKitCallerVideo({
       className={cn(
         'dash-card w-full p-3',
         fillHeight && !floating && 'flex min-h-0 flex-1 flex-col',
-        floating &&
-          'fixed left-[min(8vw,48px)] top-[min(14vh,120px)] z-[920] w-[min(440px,calc(100vw-24px))] cursor-grab shadow-[0_28px_90px_rgba(0,0,0,0.72)] ring-2 ring-[color-mix(in_srgb,#00E5FF_22%,transparent)] active:cursor-grabbing',
+        floating && FLOATING_POPOUT_SHELL_CLASSES,
       )}
     >
       <div
         className={cn(
-          'video-drag-handle mb-2 flex cursor-grab items-center gap-2 rounded-md bg-[var(--dash-surface-raised)] px-2 py-1.5 ring-1 ring-white/[0.08] active:cursor-grabbing',
-          !floating && 'hidden',
+          'video-drag-handle flex shrink-0 cursor-grab items-center gap-2 rounded-md bg-[var(--dash-surface-raised)] px-2 py-1.5 ring-1 ring-white/[0.08] active:cursor-grabbing',
+          floating ? '' : 'mb-2 hidden',
         )}
       >
         <span className="dash-label normal-case tracking-normal text-[var(--dash-text-secondary)]">
-          Floating feed · drag header
+          Floating feed · drag header · resize corner
         </span>
         <button
           type="button"
@@ -730,21 +762,9 @@ function LiveKitCallerVideo({
         </div>
       ) : null}
 
-      <Draggable
-        nodeRef={dragNodeRef}
-        disabled={!floating}
-        handle=".video-drag-handle"
-        cancel="button"
-        position={floating ? dragPos : { x: 0, y: 0 }}
-        onDrag={(_, data) => {
-          if (floating) setDragPos({ x: data.x, y: data.y })
-        }}
-        onStop={(_, data) => {
-          if (floating) setDragPos({ x: data.x, y: data.y })
-        }}
-      >
+      <DraggableVideoWrap floating={floating} dragNodeRef={dragNodeRef} dragPos={dragPos} setDragPos={setDragPos}>
         {cardBody}
-      </Draggable>
+      </DraggableVideoWrap>
     </>
   )
 }
