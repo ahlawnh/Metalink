@@ -26,13 +26,18 @@ export interface HazardTelemetry {
   confidence: number
   detectedAt: string
   description: string
+  /** undefined = legacy/system alert; false = AI-suggested unconfirmed; true = dispatcher acknowledged */
+  confirmed?: boolean
 }
 
 export interface TranscriptChunk {
   id: string
+  segment_id?: string
   speaker: 'caller' | 'dispatcher' | 'ai'
   text: string
   timestamp: string
+  /** Non-English original preserved when text has been translated to English by the backend. */
+  original_text?: string
 }
 
 export interface VideoTelemetry {

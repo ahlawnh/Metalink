@@ -36,6 +36,7 @@ function detectedItemsToHazards(
     confidence: it.confidence,
     detectedAt,
     description: it.item,
+    confirmed: false,
   }))
 }
 
@@ -88,10 +89,18 @@ function segmentsToTranscript(segments: BackendTranscriptSegment[], fallbackTime
   return segments
     .filter((segment) => segment.text.trim().length > 0)
     .map((segment, index) => ({
-      id: `tx-${segment.speaker}-${hashId(segment.text)}-${hashId(String(segment.timestamp))}-${index}`,
+      // Use stable backend segment_id as React key when available so translated updates
+      // reconcile onto the same bubble instead of creating a new one.
+      id: segment.segment_id
+        ? `tx-${segment.segment_id}`
+        : `tx-${segment.speaker}-${hashId(segment.text)}-${hashId(String(segment.timestamp))}-${index}`,
+      segment_id: segment.segment_id,
       speaker: segment.speaker,
       text: segment.text.trim(),
       timestamp: segmentTimestampIso(segment, fallbackTime),
+      original_text: typeof segment.original_text === 'string' && segment.original_text.trim().length > 0
+        ? segment.original_text.trim()
+        : undefined,
     }))
 }
 

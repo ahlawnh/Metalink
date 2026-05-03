@@ -12,6 +12,8 @@ from urllib.parse import urlparse
 from app.services.telemetry_aggregate import (
     TelemetryState,
     append_transcript_segment,
+    gate_hazards,
+    patch_segment_translation,
     publish_telemetry,
     publish_transcript_event,
     record_transcript_side_effects,
@@ -333,6 +335,7 @@ async def _mock_vision_loop(*, state: TelemetryState, interval_s: float) -> None
         await asyncio.sleep(interval_s)
         vr: VisionResult = await analyze_frame_with_gpt54(frame_b64_jpeg="", mock_ai=True, seed=i)
         state.latest_vision = _vision_to_state_dict(vr)
+        state.latest_vision["hazards"] = gate_hazards(state, state.latest_vision.get("hazards", []))
         await publish_telemetry(state)
         if _log_mock_ticks_enabled():
             print(f"[mock-ingest] vision tick {i} (interval {interval_s}s) -> publish_telemetry / WS broadcast", flush=True)
@@ -437,6 +440,7 @@ async def _vision_loop_from_livekit_track(
                 raise
 
             state.latest_vision = _vision_to_state_dict(vr)
+            state.latest_vision["hazards"] = gate_hazards(state, state.latest_vision.get("hazards", []))
             await publish_telemetry(state)
     finally:
         await stream.aclose()
@@ -498,6 +502,7 @@ async def _transcript_loop_from_livekit_track(
         if not isinstance(tchunk, TranscriptChunk):
             continue
         if tchunk.text:
+            # Append immediately so the dispatcher sees words with zero added latency.
             append_transcript_segment(
                 state,
                 speaker=speaker_role,
@@ -506,6 +511,32 @@ async def _transcript_loop_from_livekit_track(
                 is_final=tchunk.is_final,
                 confidence=tchunk.confidence,
             )
+
+            # For final chunks, kick off translation as a background task — no blocking.
+            if tchunk.is_final:
+                # Grab the id of the segment we just appended.
+                seg_id = state.transcript_segments[-1].get("segment_id") if state.transcript_segments else None
+                raw_text = tchunk.text
+
+                async def _translate_and_patch(sid: str | None, text: str) -> None:
+                    if not sid:
+                        return
+                    try:
+                        from app.services.translator import translate_to_english
+                        translated = await translate_to_english(text)
+                        if translated and translated != text:
+                            patched = patch_segment_translation(
+                                state,
+                                segment_id=sid,
+                                translated_text=translated,
+                                original_text=text,
+                            )
+                            if patched:
+                                await publish_telemetry(state)
+                    except Exception as exc:
+                        print(f"[translator] background task failed: {exc}", flush=True)
+
+                asyncio.create_task(_translate_and_patch(seg_id, raw_text))
 
         if speaker_role == "caller":
             record_transcript_side_effects(state, text=tchunk.text, is_final=tchunk.is_final)

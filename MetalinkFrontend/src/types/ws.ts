@@ -58,11 +58,14 @@ export interface BackendHapticCue {
 }
 
 export interface BackendTranscriptSegment {
+  segment_id?: string
   speaker: 'caller' | 'dispatcher'
   text: string
   timestamp: string
   is_final?: boolean
   confidence?: number
+  /** Non-English original preserved when text has been translated to English by the backend. */
+  original_text?: string
 }
 
 export interface BackendTelemetryUpdatePayload {

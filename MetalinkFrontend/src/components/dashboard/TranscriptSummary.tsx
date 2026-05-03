@@ -55,6 +55,21 @@ export default function TranscriptSummary({
   wsConnected,
 }: TranscriptSummaryProps) {
   const now = useNow(1000)
+  /** Tracks which segment ids have their original (pre-translation) text expanded. */
+  const [expandedOriginals, setExpandedOriginals] = useState<Set<string>>(new Set())
+
+  const toggleOriginal = useCallback((id: string) => {
+    setExpandedOriginals((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }, [])
+
   const ordered = useMemo(() => {
     return [...chunks].sort((a, b) => {
       const ta = Date.parse(a.timestamp)
@@ -313,6 +328,11 @@ export default function TranscriptSummary({
                         <span className="font-data text-[11px] font-semibold normal-case tracking-normal text-current opacity-70">
                           {new Date(line.timestamp).toLocaleTimeString()}
                         </span>
+                        {line.original_text ? (
+                          <span className="rounded-full border border-cyan-400/30 bg-[color-mix(in_srgb,var(--dash-accent)_10%,transparent)] px-1.5 py-0.5 font-data text-[9px] font-semibold uppercase tracking-[0.1em] text-cyan-300/80">
+                            EN
+                          </span>
+                        ) : null}
                       </p>
                       <p
                         className={cn(
@@ -322,6 +342,22 @@ export default function TranscriptSummary({
                       >
                         {line.text}
                       </p>
+                      {line.original_text ? (
+                        <div className={cn('mt-1', isDispatcher && 'text-right')}>
+                          <button
+                            type="button"
+                            onClick={() => toggleOriginal(line.id)}
+                            className="font-data text-[9px] font-semibold uppercase tracking-[0.1em] text-cyan-300/50 hover:text-cyan-300/80 focus:outline-none"
+                          >
+                            {expandedOriginals.has(line.id) ? 'Hide original ▲' : 'Show original ▼'}
+                          </button>
+                          {expandedOriginals.has(line.id) ? (
+                            <p className={cn('mt-0.5 font-data text-[10px] italic text-[var(--dash-text-secondary)] opacity-75')}>
+                              {line.original_text}
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </article>
                   </li>
                 )
