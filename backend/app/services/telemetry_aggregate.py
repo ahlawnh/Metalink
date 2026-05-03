@@ -200,6 +200,49 @@ def patch_segment_translation(
     return False
 
 
+def patch_transcript_segment(
+    state: TelemetryState,
+    *,
+    segment_id: str,
+    text: Optional[str] = None,
+    is_final: Optional[bool] = None,
+    confidence: Optional[float] = None,
+    timestamp: Optional[float] = None,
+) -> bool:
+    """
+    Update a transcript segment in-place (used for interim STT updates).
+    Returns True if the segment was found and patched.
+    """
+    if state.transcript_ingest_paused:
+        return False
+
+    for seg in state.transcript_segments:
+        if seg.get("segment_id") != segment_id:
+            continue
+
+        if text is not None:
+            trimmed = text.strip()
+            if trimmed:
+                seg["text"] = trimmed
+
+        if is_final is not None:
+            seg["is_final"] = bool(is_final)
+
+        if confidence is not None:
+            try:
+                seg["confidence"] = max(0.0, min(1.0, float(confidence)))
+            except (TypeError, ValueError):
+                pass
+
+        if timestamp is not None and isinstance(timestamp, (int, float)):
+            seg["timestamp"] = datetime.fromtimestamp(timestamp, timezone.utc).isoformat().replace("+00:00", "Z")
+
+        state.transcript_buffer = " ".join(f"{s['speaker'].title()}: {s['text']}" for s in state.transcript_segments)
+        return True
+
+    return False
+
+
 def clear_transcript_ingest_state(state: TelemetryState) -> None:
     """Wipe in-memory STT transcript when the bystander session ends (room disconnect)."""
     state.transcript_segments.clear()
