@@ -13,6 +13,7 @@ def _now_iso() -> str:
 
 
 BREATHE_WINDOW_S = 60.0
+TRANSCRIPT_SEGMENT_LIMIT = 40
 
 # Lightweight transcript hints (hackathon heuristic; not clinical diagnosis).
 AGONAL_PATTERNS: list[tuple[re.Pattern[str], str]] = [
@@ -31,6 +32,7 @@ class TelemetryState:
 
     latest_vision: dict[str, Any] = field(default_factory=dict)
     transcript_buffer: str = ""
+    transcript_segments: list[dict[str, Any]] = field(default_factory=list)
     last_breathe_timestamps_s: list[float] = field(default_factory=list)
 
 
@@ -108,6 +110,36 @@ def _safe_import_broadcaster() -> tuple[Optional[Any], Optional[Any]]:
         return None, None
 
 
+def append_transcript_segment(
+    state: TelemetryState,
+    *,
+    speaker: str,
+    text: str,
+    timestamp: Optional[float] = None,
+    is_final: bool = True,
+    confidence: float = 0.0,
+) -> None:
+    trimmed = text.strip()
+    if not trimmed:
+        return
+
+    safe_speaker = speaker if speaker in {"caller", "dispatcher"} else "caller"
+    ts = timestamp if isinstance(timestamp, (int, float)) else time.time()
+    state.transcript_segments.append(
+        {
+            "speaker": safe_speaker,
+            "text": trimmed,
+            "timestamp": datetime.fromtimestamp(ts, timezone.utc).isoformat().replace("+00:00", "Z"),
+            "is_final": bool(is_final),
+            "confidence": max(0.0, min(1.0, float(confidence or 0.0))),
+        }
+    )
+    state.transcript_segments = state.transcript_segments[-TRANSCRIPT_SEGMENT_LIMIT:]
+    state.transcript_buffer = " ".join(
+        f"{segment['speaker'].title()}: {segment['text']}" for segment in state.transcript_segments
+    )
+
+
 def build_telemetry_payload(
     *,
     state: TelemetryState,
@@ -142,6 +174,7 @@ def build_telemetry_payload(
         },
         "hazards": hazards,
         "transcription_buffer": state.transcript_buffer,
+        "transcript_segments": state.transcript_segments,
         "ai_dispatcher_alert": alert,
         "patient_position": state.latest_vision.get("patient_position", "unknown"),
         "cyanosis_detected": bool(state.latest_vision.get("cyanosis_detected", False)),

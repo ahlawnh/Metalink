@@ -119,6 +119,16 @@ class CallerLocationSnapshot(BaseModel):
     updated_at: datetime = Field(default_factory=utc_now)
 
 
+class TranscriptSegment(BaseModel):
+    """Speaker-labeled transcript item emitted from LiveKit audio ingestion."""
+
+    speaker: Literal["caller", "dispatcher"]
+    text: str = Field(..., min_length=1)
+    timestamp: datetime = Field(default_factory=utc_now)
+    is_final: bool = True
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
 class TelemetryUpdate(BaseModel):
     timestamp: datetime = Field(default_factory=utc_now)
     scene_hazards: list[DetectedItem] = Field(default_factory=list)
@@ -128,6 +138,7 @@ class TelemetryUpdate(BaseModel):
     resp_rate_estimate: RespRateEstimate = Field(default_factory=RespRateEstimate)
     consciousness_level: ConsciousnessLevel = ConsciousnessLevel.UNKNOWN
     transcript_snippet: str = ""
+    transcript_segments: list[TranscriptSegment] = Field(default_factory=list)
     rolling_summary: str = ""
     pipeline_status: PipelineStatus = PipelineStatus.MOCK
     critical_alerts: list[CriticalAlert] = Field(default_factory=list)

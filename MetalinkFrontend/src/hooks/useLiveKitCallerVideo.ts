@@ -22,14 +22,16 @@ export interface LiveKitCallerBinding {
   hasRemoteAudio: boolean
   /** Caller muted their microphone at the source (remote publication). */
   remoteMicMuted: boolean
+  /** Dispatcher mic publication state (operator -> caller). */
+  isLocalMicLive: boolean
+  localMicError: string | null
   error: string | null
   /** True while resolving URL/token (including HTTP fetch). */
   isSessionLoading: boolean
 }
 
 /**
- * Subscriber-only LiveKit session: attaches the caller's remote camera to `videoRef`
- * and remote microphone to `audioRef`. Never enables local camera/mic.
+ * LiveKit operator session: subscribes to caller camera/mic and publishes dispatcher mic.
  */
 export function useLiveKitCallerVideo(
   enabled: boolean,
@@ -40,8 +42,10 @@ export function useLiveKitCallerVideo(
   const [hasRemoteVideo, setHasRemoteVideo] = useState(false)
   const [hasRemoteAudio, setHasRemoteAudio] = useState(false)
   const [remoteMicMuted, setRemoteMicMuted] = useState(false)
+  const [isLocalMicLive, setIsLocalMicLive] = useState(false)
+  const [localMicError, setLocalMicError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [isSessionLoading, setIsSessionLoading] = useState(true)
+  const [isSessionLoading, setIsSessionLoading] = useState(enabled)
 
   const attachedVideoRef = useRef<RemoteVideoTrack | null>(null)
   const attachedAudioRef = useRef<RemoteAudioTrack | null>(null)
@@ -49,7 +53,6 @@ export function useLiveKitCallerVideo(
 
   useEffect(() => {
     if (!enabled) {
-      setIsSessionLoading(false)
       return
     }
 
@@ -133,6 +136,7 @@ export function useLiveKitCallerVideo(
     ;(async () => {
       setIsSessionLoading(true)
       setError(null)
+      setLocalMicError(null)
       let session: Awaited<ReturnType<typeof resolveLiveKitSession>>
       try {
         session = await resolveLiveKitSession()
@@ -173,7 +177,14 @@ export function useLiveKitCallerVideo(
           return
         }
         await room.localParticipant.setCameraEnabled(false)
-        await room.localParticipant.setMicrophoneEnabled(false)
+        try {
+          await room.localParticipant.setMicrophoneEnabled(true)
+          setIsLocalMicLive(true)
+          setLocalMicError(null)
+        } catch (e) {
+          setIsLocalMicLive(false)
+          setLocalMicError(e instanceof Error ? e.message : 'Microphone permission denied or unavailable')
+        }
         setConnectionState(room.state)
         syncCallerTracks(room)
       } catch (e) {
@@ -205,6 +216,8 @@ export function useLiveKitCallerVideo(
       setHasRemoteVideo(false)
       setHasRemoteAudio(false)
       setRemoteMicMuted(false)
+      setIsLocalMicLive(false)
+      setLocalMicError(null)
       setIsSessionLoading(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- stable RefObjects from parent
@@ -215,6 +228,8 @@ export function useLiveKitCallerVideo(
     hasRemoteVideo,
     hasRemoteAudio,
     remoteMicMuted,
+    isLocalMicLive,
+    localMicError,
     error,
     isSessionLoading,
   }

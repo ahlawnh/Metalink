@@ -292,6 +292,8 @@ function LiveKitCallerVideo({
     hasRemoteVideo,
     hasRemoteAudio,
     remoteMicMuted,
+    isLocalMicLive,
+    localMicError,
     error,
     isSessionLoading,
   } = useLiveKitCallerVideo(true, videoRef, audioRef)
@@ -303,6 +305,8 @@ function LiveKitCallerVideo({
   const [pipActive, setPipActive] = useState(false)
   const [mediaPlaying, setMediaPlaying] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [callerAudioBlocked, setCallerAudioBlocked] = useState(false)
+  const [callerAudioIssue, setCallerAudioIssue] = useState<string | null>(null)
 
   const syncPlaybackFlag = useCallback(() => {
     const v = videoRef.current
@@ -377,13 +381,38 @@ function LiveKitCallerVideo({
     syncPlaying()
   }, [syncPlaying])
 
+  const enableCallerAudio = useCallback(async () => {
+    const a = audioRef.current
+    if (!a) return
+    a.muted = false
+    if (a.volume === 0) a.volume = 1
+    try {
+      await a.play()
+      setLocalSpeakerMuted(false)
+      setCallerAudioBlocked(false)
+      setCallerAudioIssue(null)
+    } catch (e) {
+      setCallerAudioBlocked(true)
+      setCallerAudioIssue(
+        e instanceof Error
+          ? e.message
+          : 'Browser blocked caller audio. Click Enable caller audio again.',
+      )
+    }
+  }, [])
+
   const toggleSpeakerMute = useCallback(() => {
     const a = audioRef.current
     if (!a) return
-    a.muted = !a.muted
-    if (!a.muted && a.volume === 0) a.volume = 1
-    setLocalSpeakerMuted(a.muted)
-  }, [])
+    if (a.muted || a.volume === 0) {
+      void enableCallerAudio()
+      return
+    }
+    a.muted = true
+    setLocalSpeakerMuted(true)
+    setCallerAudioBlocked(false)
+    setCallerAudioIssue(null)
+  }, [enableCallerAudio])
 
   const toggleFullscreen = useCallback(() => {
     const root = shellRef.current
@@ -504,6 +533,11 @@ function LiveKitCallerVideo({
         >
           {localSpeakerMuted ? 'Unmute' : 'Mute'}
         </button>
+        {hasRemoteAudio && !remoteMicMuted ? (
+          <button type="button" onClick={() => void enableCallerAudio()} className={ctrlBtn}>
+            Enable caller audio
+          </button>
+        ) : null}
         <button type="button" onClick={toggleFullscreen} className={ctrlBtn}>
           {isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
         </button>
@@ -543,6 +577,31 @@ function LiveKitCallerVideo({
             Caller mic muted
           </span>
         ) : null}
+        {hasRemoteAudio && callerAudioBlocked ? (
+          <span
+            className="pointer-events-auto inline-flex max-w-[18rem] items-center gap-2 rounded-md border border-amber-500/50 bg-[color-mix(in_srgb,#FFB74D18%,var(--dash-bg))] px-2.5 py-1 text-[10px] font-medium leading-snug text-[#FFE082]"
+            title={callerAudioIssue ?? undefined}
+          >
+            Browser blocked audio. Click Enable caller audio.
+          </span>
+        ) : null}
+        {localMicError ? (
+          <span
+            className="inline-flex max-w-[18rem] items-center gap-2 rounded-md border border-amber-500/50 bg-[color-mix(in_srgb,#FFB74D18%,var(--dash-bg))] px-2.5 py-1 text-[10px] font-medium leading-snug text-[#FFE082]"
+            title={localMicError}
+          >
+            Dispatcher mic unavailable
+          </span>
+        ) : isLocalMicLive ? (
+          <span className="inline-flex items-center gap-2 rounded-full border border-[color-mix(in_srgb,#00FF8845%,transparent)] bg-[color-mix(in_srgb,#00FF8818%,var(--dash-bg))] px-2.5 py-1 font-data text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7CFFB3]">
+            <span className="size-1.5 rounded-full bg-[#00FF88]" />
+            Dispatcher mic live
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-[var(--dash-bg)] px-2.5 py-1 font-data text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dash-text-secondary)]">
+            Dispatcher mic starting
+          </span>
+        )}
         {showStreamChip ? (
           <span className="pointer-events-none inline-flex items-center gap-2 rounded-full border border-[color-mix(in_srgb,#00FF8845%,transparent)] bg-[color-mix(in_srgb,#00FF8818%,var(--dash-bg))] px-2.5 py-1 font-data text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7CFFB3]">
             <span className="size-1.5 rounded-full bg-[#00FF88]" />

@@ -4,10 +4,12 @@ import time
 
 from app.services.telemetry_aggregate import (
     TelemetryState,
+    append_transcript_segment,
     build_telemetry_payload,
     record_transcript_side_effects,
     transcript_critical_stress,
 )
+from app.services.livekit_ingest import classify_livekit_audio_participant
 
 
 def test_transcript_critical_stress_triggers() -> None:
@@ -55,3 +57,30 @@ def test_record_transcript_side_effects_breathe_updates_rr_window() -> None:
     record_transcript_side_effects(state, text="breathe", is_final=True)
     payload = build_telemetry_payload(state=state)
     assert payload["vitals"]["estimated_respiratory_rate"] == 2
+
+
+def test_append_transcript_segment_keeps_speaker_labels() -> None:
+    state = TelemetryState()
+    append_transcript_segment(state, speaker="caller", text="help please", timestamp=1.0, confidence=0.9)
+    append_transcript_segment(state, speaker="dispatcher", text="stay with me", timestamp=2.0, confidence=0.8)
+
+    payload = build_telemetry_payload(state=state)
+    assert payload["transcript_segments"][-2]["speaker"] == "caller"
+    assert payload["transcript_segments"][-1]["speaker"] == "dispatcher"
+    assert "Caller: help please" in payload["transcription_buffer"]
+    assert "Dispatcher: stay with me" in payload["transcription_buffer"]
+
+
+def test_livekit_audio_identity_classification() -> None:
+    assert (
+        classify_livekit_audio_participant("caller", backend_identity="aegis-link-backend")
+        == "caller"
+    )
+    assert (
+        classify_livekit_audio_participant("metalink-operator-abc", backend_identity="aegis-link-backend")
+        == "dispatcher"
+    )
+    assert (
+        classify_livekit_audio_participant("aegis-link-backend", backend_identity="aegis-link-backend")
+        is None
+    )

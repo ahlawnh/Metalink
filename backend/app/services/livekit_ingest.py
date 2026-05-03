@@ -5,10 +5,11 @@ import base64
 import os
 import time
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Optional, Literal
 
 from app.services.telemetry_aggregate import (
     TelemetryState,
+    append_transcript_segment,
     publish_telemetry,
     publish_transcript_event,
     record_transcript_side_effects,
@@ -17,6 +18,7 @@ from app.services.transcription import TranscriptChunk, deepgram_stream_from_pcm
 from app.services.vision import VisionResult, analyze_frame_with_gpt54
 
 _DG_SAMPLE_RATE = 16000
+TranscriptSpeaker = Literal["caller", "dispatcher"]
 
 
 @dataclass(frozen=True)
@@ -43,6 +45,39 @@ def _pick_preferred_camera_video_track(tracks: list[Any]) -> Optional[Any]:
         return None
     cameras = [t for t in tracks if not _track_is_screen_share(t)]
     return cameras[0] if cameras else tracks[0]
+
+
+def classify_livekit_audio_participant(
+    identity: str,
+    *,
+    backend_identity: str,
+    caller_identity: Optional[str] = None,
+    dispatcher_identity_prefix: Optional[str] = None,
+) -> Optional[TranscriptSpeaker]:
+    normalized = (identity or "").strip()
+    if not normalized or normalized == backend_identity:
+        return None
+
+    caller = (caller_identity or os.getenv("LIVEKIT_CALLER_IDENTITY") or "caller").strip()
+    dispatcher_prefix = (
+        dispatcher_identity_prefix
+        or os.getenv("LIVEKIT_DISPATCHER_IDENTITY_PREFIX")
+        or "metalink-operator"
+    ).strip()
+
+    if normalized == caller:
+        return "caller"
+    if dispatcher_prefix and normalized.startswith(dispatcher_prefix):
+        return "dispatcher"
+    return None
+
+
+def _identity_from_track_args(args: tuple[Any, ...]) -> str:
+    for candidate in reversed(args):
+        identity = getattr(candidate, "identity", None)
+        if isinstance(identity, str) and identity.strip():
+            return identity.strip()
+    return ""
 
 
 def _vision_to_state_dict(vr: VisionResult) -> dict[str, Any]:
@@ -128,29 +163,40 @@ async def run_ingestion_loop(
 
     # Collect tracks (multiple video tracks possible; prefer camera over screen-share).
     video_tracks: list[Any] = []
-    audio_track: Optional[Any] = None
+    transcript_tasks: dict[TranscriptSpeaker, asyncio.Task[None]] = {}
+    tasks: list[asyncio.Task[None]] = []
 
-    def on_track_subscribed(track: Any, *_: Any) -> None:
-        nonlocal audio_track
+    def on_track_subscribed(track: Any, *args: Any) -> None:
         kind = getattr(track, "kind", None)
         # TrackKind stringifies to "1"/"2", not "audio"/"video".
         if kind == rtc.TrackKind.KIND_VIDEO:
             video_tracks.append(track)
-        elif kind == rtc.TrackKind.KIND_AUDIO and audio_track is None:
-            audio_track = track
+        elif kind == rtc.TrackKind.KIND_AUDIO:
+            identity = _identity_from_track_args(args)
+            speaker = classify_livekit_audio_participant(identity, backend_identity=cfg.identity)
+            if speaker is None or speaker in transcript_tasks:
+                return
+            task = asyncio.create_task(
+                _transcript_loop_from_livekit_track(
+                    state=state,
+                    audio_track=track,
+                    speaker_role=speaker,
+                )
+            )
+            transcript_tasks[speaker] = task
+            tasks.append(task)
 
     room.on("track_subscribed", on_track_subscribed)
 
     # Spin until we have at least video or audio.
     started = time.time()
-    while not video_tracks and audio_track is None:
+    while not video_tracks and not transcript_tasks:
         if time.time() - started > 20:
             raise RuntimeError("Timed out waiting for LiveKit tracks.")
         await asyncio.sleep(0.1)
 
     video_track = _pick_preferred_camera_video_track(video_tracks)
 
-    tasks: list[asyncio.Task[None]] = []
     if video_track is not None:
         tasks.append(
             asyncio.create_task(
@@ -163,8 +209,6 @@ async def run_ingestion_loop(
                 )
             )
         )
-    if audio_track is not None:
-        tasks.append(asyncio.create_task(_transcript_loop_from_livekit_track(state=state, audio_track=audio_track)))
 
     try:
         await asyncio.gather(*tasks)
@@ -189,14 +233,24 @@ async def _mock_vision_loop(*, state: TelemetryState, interval_s: float) -> None
 
 
 async def _mock_transcript_loop(*, state: TelemetryState) -> None:
-    buffer_parts: list[str] = []
     async for chunk in mock_transcript_stream():
-        buffer_parts.append(chunk.text)
-        buffer_parts = buffer_parts[-20:]
-        state.transcript_buffer = " ".join(buffer_parts)
+        append_transcript_segment(
+            state,
+            speaker="caller",
+            text=chunk.text,
+            timestamp=chunk.timestamp,
+            is_final=chunk.is_final,
+            confidence=chunk.confidence,
+        )
         record_transcript_side_effects(state, text=chunk.text, is_final=chunk.is_final)
         await publish_transcript_event(
-            {"timestamp": chunk.timestamp, "text": chunk.text, "is_final": chunk.is_final, "confidence": chunk.confidence}
+            {
+                "timestamp": chunk.timestamp,
+                "speaker": "caller",
+                "text": chunk.text,
+                "is_final": chunk.is_final,
+                "confidence": chunk.confidence,
+            }
         )
         await publish_telemetry(state)
 
@@ -252,7 +306,12 @@ async def _vision_loop_from_livekit_track(
         await stream.aclose()
 
 
-async def _transcript_loop_from_livekit_track(*, state: TelemetryState, audio_track: Any) -> None:
+async def _transcript_loop_from_livekit_track(
+    *,
+    state: TelemetryState,
+    audio_track: Any,
+    speaker_role: TranscriptSpeaker,
+) -> None:
     """
     Convert LiveKit audio into 16kHz mono PCM16 bytes for Deepgram.
 
@@ -297,21 +356,26 @@ async def _transcript_loop_from_livekit_track(*, state: TelemetryState, audio_tr
         finally:
             await astream.aclose()
 
-    buffer_parts: list[str] = []
-
     async for tchunk in deepgram_stream_from_pcm16(pcm16_mono_16khz=pcm_iter()):
         if not isinstance(tchunk, TranscriptChunk):
             continue
         if tchunk.text:
-            buffer_parts.append(tchunk.text)
-            buffer_parts = buffer_parts[-40:]
-            state.transcript_buffer = " ".join(buffer_parts)
+            append_transcript_segment(
+                state,
+                speaker=speaker_role,
+                text=tchunk.text,
+                timestamp=tchunk.timestamp,
+                is_final=tchunk.is_final,
+                confidence=tchunk.confidence,
+            )
 
-        record_transcript_side_effects(state, text=tchunk.text, is_final=tchunk.is_final)
+        if speaker_role == "caller":
+            record_transcript_side_effects(state, text=tchunk.text, is_final=tchunk.is_final)
 
         await publish_transcript_event(
             {
                 "timestamp": tchunk.timestamp,
+                "speaker": speaker_role,
                 "text": tchunk.text,
                 "is_final": tchunk.is_final,
                 "confidence": tchunk.confidence,
