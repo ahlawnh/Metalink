@@ -259,7 +259,7 @@ export function useTelemetryStream(): {
     }
 
     void poll()
-    const id = window.setInterval(poll, 5000)
+    const id = window.setInterval(poll, 1500)
     return () => {
       cancelled = true
       window.clearInterval(id)
