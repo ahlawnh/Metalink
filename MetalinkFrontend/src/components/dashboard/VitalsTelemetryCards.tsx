@@ -96,8 +96,9 @@ function presentationFor(mode: PatientCardiacMode): { bpmClass: string; strokeCl
   }
 }
 
+/** Full-width horizontal strips (not square tiles). */
 const telemetrySurface =
-  'rounded-xl bg-[#1E1E1E] p-2 shadow-[0_4px_24px_rgba(0,0,0,0.55)] sm:p-2'
+  'w-full rounded-lg border border-white/[0.06] bg-[#1E1E1E] px-4 py-3 shadow-[0_4px_24px_rgba(0,0,0,0.55)]'
 
 const cprPanelBtn =
   'rounded-md bg-[#2A2A2A] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--dash-text-primary)] ring-1 ring-white/[0.08] hover:bg-[#333] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dash-accent)] disabled:cursor-not-allowed disabled:opacity-45'
@@ -231,7 +232,7 @@ function CprTempoControl({
   )
 }
 
-/** Twin vitals panels — HR / RR live from WebSocket telemetry; monospace numerics for stable layout. */
+/** Stacked rectangular vitals strips — HR / RR; full width, sparkline emphasis. */
 export default function VitalsTelemetryCards({
   patient,
   respiratory,
@@ -259,13 +260,15 @@ export default function VitalsTelemetryCards({
   const rrTone = rrStatusTone(respiratory.respiratory_status)
 
   const hrSamples = clampHistory(patient.history_bpm, 32)
-  const hrPath = useMemo(() => buildSparkPath(hrSamples, 220, 44), [hrSamples])
+  const sparkW = 320
+  const sparkH = 36
+  const hrPath = useMemo(() => buildSparkPath(hrSamples, sparkW, sparkH), [hrSamples])
 
   const rrSamples = clampHistory(respiratory.history_rr ?? [], 32)
-  const rrPath = useMemo(() => buildSparkPath(rrSamples, 220, 44), [rrSamples])
+  const rrPath = useMemo(() => buildSparkPath(rrSamples, sparkW, sparkH), [rrSamples])
 
   return (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+    <div className="flex w-full flex-col gap-3">
       <section className={telemetrySurface} aria-label="Patient heart rate">
         <div className="flex flex-wrap items-start justify-between gap-2 px-1 pb-1">
           <p className="dash-label shrink-0">Heart rate</p>
@@ -289,9 +292,9 @@ export default function VitalsTelemetryCards({
               <p className="text-sm font-medium leading-snug text-[var(--dash-text-secondary)]">No data</p>
             )}
           </div>
-          <div className="mt-2 px-1 pb-1" aria-hidden>
+          <div className="mt-2 min-w-0 px-1 pb-0" aria-hidden>
             {hrPresent && hrPath ? (
-              <svg className="h-10 w-full" viewBox="0 0 220 44" preserveAspectRatio="none">
+              <svg className="h-8 w-full max-w-none" viewBox={`0 0 ${sparkW} ${sparkH}`} preserveAspectRatio="none">
                 <path
                   d="M0 22 H220"
                   className="stroke-[var(--dash-text-secondary)] opacity-25"
@@ -331,9 +334,9 @@ export default function VitalsTelemetryCards({
               <p className="text-sm font-medium leading-snug text-[var(--dash-text-secondary)]">No data</p>
             )}
           </div>
-          <div className="mt-2 px-1 pb-1" aria-hidden>
+          <div className="mt-2 min-w-0 px-1 pb-0" aria-hidden>
             {rrPresent && rrPath ? (
-              <svg className="h-10 w-full" viewBox="0 0 220 44" preserveAspectRatio="none">
+              <svg className="h-8 w-full max-w-none" viewBox={`0 0 ${sparkW} ${sparkH}`} preserveAspectRatio="none">
                 <path
                   d="M0 22 H220"
                   className="stroke-[var(--dash-text-secondary)] opacity-25"
