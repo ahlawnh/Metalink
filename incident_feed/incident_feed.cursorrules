@@ -1,0 +1,42 @@
+# V3 Master Plan: Emergency Dispatch AI (Next.js & FastAPI)
+
+You are an expert full-stack engineer and AI specialist. You are building an emergency response system using a Next.js frontend (PWA), a FastAPI backend, and LiveKit for real-time video orchestration.
+
+## 1. Tech Stack Overview
+- **Frontend:** Next.js 14+ (App Router), LiveKit React SDK, Zustand (State), Tailwind CSS.
+- **Backend:** FastAPI, LiveKit Python SDK, OpenAI API (Vision), WebSockets.
+- **Protocol:** LiveKit Rooms for video/audio; WebSockets for JSON telemetry (vitals/hazards).
+
+## 2. Frontend Development (Broadcaster & Dashboard)
+- **Broadcaster Component:** Use `LiveKitRoom` and `VideoConference` components. Specifically, Edward's broadcaster must:
+    - Force Safari mobile compatibility (PWA).
+    - Default to the environment (back) camera.
+    - Request and maintain camera permissions.
+- **Dispatcher Dashboard:**
+    - Connect to `ws://127.0.0.1:8000/api/ws/telemetry`.
+    - Use Zustand for global telemetry state (hazards, vitals, transcript).
+    - UI must flash red when `hazards` are detected in the telemetry stream.
+
+## 3. Backend Development (AI Engine & Ingestion)
+- **OpenAI Vision (app/services/vision.py):**
+    - Use `gpt-4o` (or the requested future-spec `gpt-5.4`).
+    - Input: Base64 encoded image frame.
+    - Format: `response_format={"type": "json_object"}`.
+    - Output: JSON containing `hazards` (list) and `respiratory_rate` (int).
+- **LiveKit Ingest (app/services/livekit_ingest.py):**
+    - Connect to the LiveKit Room as an `async` participant.
+    - Implement a `2.5s` ingestion loop using `asyncio.sleep(2.5)`.
+    - Extract video frames from the stream, encode to Base64, and pass to `vision.py`.
+- **Mocking Policy:**
+    - Respect `MOCK_AI=true` and `ENABLE_INGESTION_LOOP=true` env vars.
+    - When `MOCK_AI` is true, return deterministic fake JSON to the telemetry socket.
+
+## 4. Coding Patterns & Architecture
+- **Pipes First:** Focus on the WebSocket connection between backend and Alan's dashboard before integrating real AI logic.
+- **Async Safety:** All ingestion and telemetry broadcasting must be non-blocking.
+- **Error Handling:** Gracefully handle LiveKit room disconnections and OpenAI rate limits.
+
+## 5. Verification Checklist
+- [ ] Telemetry WebSocket is streaming data every 2.5s.
+- [ ] Alan's dashboard updates based on MOCK data.
+- [ ] Edward's PWA successfully joins the LiveKit room and sends video.

@@ -1,0 +1,10 @@
+{
+  "name": "Incident feed broadcaster",
+  "short_name": "Incident feed",
+  "description": "Stream incident camera to dispatch",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f5f2",
+  "theme_color": "#f6f5f2",
+  "icons": []
+}
