@@ -22,9 +22,7 @@ export function MainLayout() {
       ? 'Live'
       : connectionState === 'connecting'
         ? 'Connecting…'
-        : connectionState === 'error'
-          ? 'Error'
-          : 'Disconnected'
+        : 'Fallback'
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#050505] text-[var(--dash-text-primary)]">
@@ -63,7 +61,12 @@ export function MainLayout() {
       <div className="grid flex-1 grid-cols-[minmax(0,1fr)_420px] gap-6 overflow-hidden px-6 pb-6">
         <section className="flex min-h-0 flex-col gap-4 overflow-hidden">
           <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-[var(--dash-border)] bg-[var(--dash-surface)] shadow-[0_0_25px_rgba(0,255,136,0.08)]">
-            <VideoPlayer video={telemetry.video} />
+            <VideoPlayer
+              streamUrl={telemetry.video.streamUrl}
+              posterUrl={telemetry.video.posterUrl}
+              streamStatus={telemetry.video.streamStatus}
+              wsLatencyMs={wsLatencyMs}
+            />
           </div>
           <div className="h-40 shrink-0 overflow-hidden rounded-2xl border border-[var(--dash-border)] bg-[var(--dash-surface)] p-3">
             <CallerLocationMapPanel location={telemetry.caller_location} />
@@ -84,10 +87,10 @@ export function MainLayout() {
               <SystemAlertsPanel alerts={telemetry.systemAlerts} />
               <HazardList hazards={telemetry.hazards} />
               <TranscriptSummary
-                transcript={telemetry.transcript}
-                summary={telemetry.transcript_ai_summary}
-                onRequestSummary={requestRollingSummary}
-                onSubscribeSummary={subscribeRollingSummary}
+                chunks={telemetry.transcript}
+                requestRollingSummary={requestRollingSummary}
+                subscribeRollingSummary={subscribeRollingSummary}
+                wsConnected={connectionState === 'connected'}
               />
             </div>
           </div>
