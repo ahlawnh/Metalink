@@ -311,7 +311,7 @@ export function applyTelemetryUpdate(
       confidence: keepResp
         ? previous.respiratory.confidence
         : Number(payload.resp_rate_estimate?.confidence ?? 0),
-      source: pipelineStatus === 'live' ? 'ai' : 'mock',
+      source: pipelineStatus === 'mock' ? 'mock' : 'ai',
       history_rr,
     },
     hazards,
@@ -394,7 +394,7 @@ export function applyPipelineStatus(
     },
     respiratory: {
       ...previous.respiratory,
-      source: pipelineStatus === 'live' ? 'ai' : 'mock',
+      source: pipelineStatus === 'mock' ? 'mock' : 'ai',
       history_rr: previous.respiratory.history_rr?.length ? previous.respiratory.history_rr : [],
     },
   }

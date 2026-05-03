@@ -6,6 +6,8 @@ import { cn } from '@/lib/utils'
 import type { VideoTelemetry } from '@/types/dashboard'
 
 const FALLBACK_CLIP = 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4'
+const MUTED_STATUS_CHIP =
+  'rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 font-data text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--dash-text-secondary)]'
 
 /** Use LiveKit feed when static URL+JWT are set, or when the Metalink API can mint a token (`VITE_TELEMETRY_API_ORIGIN`). */
 function shouldUseLiveKit(): boolean {
@@ -155,7 +157,7 @@ function FallbackTelemetryVideo({
   }, [floating, dockFloating])
 
   const ctrlBtn =
-    'rounded-md bg-[var(--dash-surface-raised)] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--dash-text-primary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ring-white/[0.08] hover:bg-[color-mix(in_srgb,var(--dash-surface-raised)_92%,#fff)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dash-accent)]'
+    'relative overflow-hidden rounded-md border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--dash-text-primary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.07)] transition-all hover:border-white/[0.14] hover:bg-white/[0.07] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent'
 
   const pipSupported =
     typeof document !== 'undefined' &&
@@ -209,14 +211,14 @@ function FallbackTelemetryVideo({
 
       <div className="pointer-events-none absolute left-3 top-3 z-10 flex flex-col items-start gap-2">
         {showLivePov ? (
-          <span className="inline-flex items-center gap-2 rounded-full border border-red-500/85 bg-red-950/88 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-red-100 ring-1 ring-red-400/35">
-            <span className="size-2 animate-pulse rounded-full bg-red-400" />
+          <span className={cn('inline-flex items-center gap-2', MUTED_STATUS_CHIP)}>
+            <span className="size-1.5 rounded-full bg-[var(--dash-text-secondary)]" />
             Live POV
           </span>
         ) : null}
         {showStreamChip ? (
-          <span className="pointer-events-none inline-flex items-center gap-2 rounded-full border border-[color-mix(in_srgb,#00FF8845%,transparent)] bg-[color-mix(in_srgb,#00FF8818%,var(--dash-bg))] px-2.5 py-1 font-data text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7CFFB3]">
-            <span className="size-1.5 rounded-full bg-[#00FF88]" />
+          <span className={cn('pointer-events-none inline-flex items-center gap-2', MUTED_STATUS_CHIP)}>
+            <span className="size-1.5 rounded-full bg-[var(--dash-text-secondary)]" />
             Stream connected
           </span>
         ) : null}
@@ -489,7 +491,7 @@ function LiveKitCallerVideo({
   }, [floating, dockFloating])
 
   const ctrlBtn =
-    'rounded-md bg-[var(--dash-surface-raised)] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--dash-text-primary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ring-white/[0.08] hover:bg-[color-mix(in_srgb,var(--dash-surface-raised)_92%,#fff)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dash-accent)]'
+    'relative overflow-hidden rounded-md border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--dash-text-primary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.07)] transition-all hover:border-white/[0.14] hover:bg-white/[0.07] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent'
 
   const pipSupported =
     typeof document !== 'undefined' &&
@@ -599,8 +601,8 @@ function LiveKitCallerVideo({
 
       <div className="pointer-events-none absolute left-3 top-3 z-10 flex max-w-[min(100%,20rem)] flex-col items-start gap-2">
         {showLivePov ? (
-          <span className="inline-flex items-center gap-2 rounded-full border border-red-500/85 bg-red-950/88 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-red-100 ring-1 ring-red-400/35">
-            <span className="size-2 animate-pulse rounded-full bg-red-400" />
+          <span className={cn('inline-flex items-center gap-2', MUTED_STATUS_CHIP)}>
+            <span className="size-1.5 rounded-full bg-[var(--dash-text-secondary)]" />
             Live POV
           </span>
         ) : null}
@@ -641,8 +643,8 @@ function LiveKitCallerVideo({
             Dispatcher mic unavailable
           </span>
         ) : isLocalMicLive ? (
-          <span className="inline-flex items-center gap-2 rounded-full border border-[color-mix(in_srgb,#00FF8845%,transparent)] bg-[color-mix(in_srgb,#00FF8818%,var(--dash-bg))] px-2.5 py-1 font-data text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7CFFB3]">
-            <span className="size-1.5 rounded-full bg-[#00FF88]" />
+          <span className={cn('inline-flex items-center gap-2', MUTED_STATUS_CHIP)}>
+            <span className="size-1.5 rounded-full bg-[var(--dash-text-secondary)]" />
             Dispatcher mic live
           </span>
         ) : (
@@ -651,8 +653,8 @@ function LiveKitCallerVideo({
           </span>
         )}
         {showStreamChip ? (
-          <span className="pointer-events-none inline-flex items-center gap-2 rounded-full border border-[color-mix(in_srgb,#00FF8845%,transparent)] bg-[color-mix(in_srgb,#00FF8818%,var(--dash-bg))] px-2.5 py-1 font-data text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7CFFB3]">
-            <span className="size-1.5 rounded-full bg-[#00FF88]" />
+          <span className={cn('pointer-events-none inline-flex items-center gap-2', MUTED_STATUS_CHIP)}>
+            <span className="size-1.5 rounded-full bg-[var(--dash-text-secondary)]" />
             Stream connected
           </span>
         ) : null}

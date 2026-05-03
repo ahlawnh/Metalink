@@ -23,7 +23,7 @@ function presentationFor(mode: PatientCardiacMode): ModePresentation {
   switch (mode) {
     case 'stable':
       return {
-        bpmClass: 'text-[#00FF88]',
+        bpmClass: 'text-[#00FF88] drop-shadow-[0_0_8px_rgba(0,255,136,0.24)]',
         strokeClass: 'stroke-[#00FF88]',
         ribbonClass: cn(
           ribbonBase,
@@ -34,7 +34,7 @@ function presentationFor(mode: PatientCardiacMode): ModePresentation {
       }
     case 'elevated_stress':
       return {
-        bpmClass: 'text-[#FFEA00]',
+        bpmClass: 'text-[#FFEA00] drop-shadow-[0_0_8px_rgba(255,234,0,0.22)]',
         strokeClass: 'stroke-[#FFEA00]',
         ribbonClass: cn(
           ribbonBase,
@@ -45,7 +45,7 @@ function presentationFor(mode: PatientCardiacMode): ModePresentation {
       }
     case 'hypoperfusion_watch':
       return {
-        bpmClass: 'text-[#FF9100]',
+        bpmClass: 'text-[#FF9100] drop-shadow-[0_0_8px_rgba(255,145,0,0.24)]',
         strokeClass: 'stroke-[#FF9100]',
         ribbonClass: cn(
           ribbonBase,
@@ -56,7 +56,7 @@ function presentationFor(mode: PatientCardiacMode): ModePresentation {
       }
     case 'compensatory_tachycardia':
       return {
-        bpmClass: 'text-[#FF5722]',
+        bpmClass: 'text-[#FF5722] drop-shadow-[0_0_9px_rgba(255,87,34,0.28)]',
         strokeClass: 'stroke-[#FF5722]',
         ribbonClass: cn(
           ribbonBase,
@@ -67,7 +67,7 @@ function presentationFor(mode: PatientCardiacMode): ModePresentation {
       }
     case 'critical_intervention':
       return {
-        bpmClass: 'text-[#FF1744]',
+        bpmClass: 'text-[#FF1744] drop-shadow-[0_0_11px_rgba(255,23,68,0.36)]',
         strokeClass: 'stroke-[#FF1744]',
         ribbonClass: cn(
           ribbonBase,
@@ -117,7 +117,8 @@ export default function PatientHeartMonitor({ patient }: PatientHeartMonitorProp
   return (
     <section
       className={cn(
-        'dash-card relative shrink-0 overflow-hidden p-3 transition-[box-shadow] duration-300',
+        'dash-card relative shrink-0 overflow-hidden p-3 transition-all duration-300',
+        'before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent',
         theme.outerAccentClass,
       )}
       aria-label={
@@ -135,20 +136,23 @@ export default function PatientHeartMonitor({ patient }: PatientHeartMonitorProp
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
-        <p
-          className={cn(
-            'font-data text-5xl font-extrabold tabular-nums leading-none tracking-tight transition-colors',
-            theme.bpmClass,
-          )}
-        >
-          {awaitingLiveHr ? '—' : displayedBpm}
-        </p>
+        <div className="flex items-end gap-1.5">
+          <p
+            className={cn(
+              'font-data text-5xl font-extrabold tabular-nums leading-none tracking-tight transition-colors',
+              theme.bpmClass,
+            )}
+          >
+            {awaitingLiveHr ? '—' : displayedBpm}
+          </p>
+          <span className="dash-label mb-1 tracking-[0.14em]">bpm</span>
+        </div>
         <div className="dash-inset min-h-[2.35rem] min-w-[120px] flex-1 pt-1.5" aria-hidden>
           {path ? (
             <svg className="h-10 w-full" viewBox="0 0 220 44" preserveAspectRatio="none">
               <path
                 d="M0 22 H220"
-                className="stroke-[var(--dash-text-secondary)] opacity-35"
+                className="stroke-[var(--dash-text-secondary)] opacity-25"
                 fill="none"
                 strokeWidth="0.75"
                 vectorEffect="non-scaling-stroke"

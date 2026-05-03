@@ -5,12 +5,38 @@ import os
 
 from app.core.config import Settings
 from app.core.mock_telemetry import build_mock_telemetry
+from app.schemas.telemetry import AlertSeverity, CriticalAlert, PipelineStatus, TelemetryUpdate
 from app.services.broadcast import broadcast_telemetry
 from app.services.livekit_ingest import LiveKitConfig, run_ingestion_loop
 from app.services.telemetry_aggregate import TelemetryState
 
 
 telemetry_state = TelemetryState()
+
+
+def _live_ingest_failure_update(exc: Exception) -> TelemetryUpdate:
+    """When MOCK_AI is off, never push a mock scenario snapshot on ingest errors — only a degraded system notice."""
+    hint = str(exc).replace("\n", " ").strip()
+    if len(hint) > 400:
+        hint = hint[:397] + "..."
+    return TelemetryUpdate(
+        pipeline_status=PipelineStatus.DEGRADED,
+        critical_alerts=[
+            CriticalAlert(
+                id="live-ingest-unavailable",
+                severity=AlertSeverity.WARNING,
+                title="Live ingestion unavailable",
+                message=(
+                    "The LiveKit ingest loop exited or could not start. "
+                    "Check LIVEKIT_* in .env, install livekit packages, restart the server, "
+                    "and ensure a caller is publishing to the room."
+                    + (f" Last error: {hint}" if hint else "")
+                ),
+                confidence=1.0,
+                source="system",
+            )
+        ],
+    )
 
 
 def build_livekit_config(settings: Settings) -> LiveKitConfig:
@@ -46,5 +72,8 @@ async def run_safe_ingestion_loop(settings: Settings) -> None:
             raise
         except Exception as exc:
             print(f"Ingestion loop failed; retrying in 3 seconds: {exc}")
-            await broadcast_telemetry(build_mock_telemetry("degraded_pipeline_case", sequence=0))
+            if settings.mock_ai:
+                await broadcast_telemetry(build_mock_telemetry("degraded_pipeline_case", sequence=0))
+            else:
+                await broadcast_telemetry(_live_ingest_failure_update(exc))
             await asyncio.sleep(3)

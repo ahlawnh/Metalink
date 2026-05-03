@@ -30,18 +30,19 @@ interface TranscriptSummaryProps {
 function SummaryLoadingPanel() {
   return (
     <div
-      className="min-h-[7.5rem] rounded-lg bg-[var(--dash-surface-raised)] p-4 ring-1 ring-white/[0.06]"
+      className="relative min-h-[7.5rem] overflow-hidden rounded-lg border border-white/[0.07] bg-white/[0.02] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-sm"
       aria-busy="true"
       aria-label="Generating AI summary"
     >
-      <p className="mb-4 text-center text-xs font-medium tracking-wide text-[var(--dash-text-secondary)] motion-safe:animate-pulse">
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/30 to-transparent" />
+      <p className="mb-4 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dash-text-secondary)] motion-safe:animate-pulse">
         AI compiling summary…
       </p>
       <div className="space-y-3">
-        <div className="h-3 w-2/5 rounded-md summary-shimmer-bg ring-1 ring-white/[0.04]" />
-        <div className="h-3 w-full rounded-md summary-shimmer-bg ring-1 ring-white/[0.04]" />
-        <div className="h-3 w-[92%] rounded-md summary-shimmer-bg ring-1 ring-white/[0.04]" />
-        <div className="h-3 w-4/5 rounded-md summary-shimmer-bg ring-1 ring-white/[0.04]" />
+        <div className="h-2.5 w-2/5 rounded-md summary-shimmer-bg ring-1 ring-white/[0.04]" />
+        <div className="h-2.5 w-full rounded-md summary-shimmer-bg ring-1 ring-white/[0.04]" />
+        <div className="h-2.5 w-[92%] rounded-md summary-shimmer-bg ring-1 ring-white/[0.04]" />
+        <div className="h-2.5 w-4/5 rounded-md summary-shimmer-bg ring-1 ring-white/[0.04]" />
       </div>
     </div>
   )
@@ -183,7 +184,7 @@ export default function TranscriptSummary({
           onClick={onGenerateClick}
           disabled={!wsConnected || isGenerating}
           title={wsConnected ? undefined : 'Connect to telemetry service to request a summary'}
-          className="w-full rounded-lg bg-[color-mix(in_srgb,#18FFFF_16%,var(--dash-surface))] px-4 py-3 text-center text-sm font-semibold tracking-tight text-[#E0E0E0] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ring-[color-mix(in_srgb,#00E5FF_40%,transparent)] transition hover:bg-[color-mix(in_srgb,#18FFFF_24%,var(--dash-surface))] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00E5FF] disabled:cursor-not-allowed disabled:opacity-45"
+          className="group relative w-full overflow-hidden rounded-lg border border-cyan-300/25 bg-white/[0.05] px-4 py-3 text-center text-sm font-bold tracking-[0.08em] text-cyan-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_12px_32px_rgba(0,229,255,0.08)] transition-all duration-200 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-cyan-200/70 before:to-transparent hover:border-cyan-200/55 hover:bg-white/[0.075] hover:text-white hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_16px_44px_rgba(0,229,255,0.18)] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200/70 disabled:cursor-not-allowed disabled:opacity-45"
         >
           {isGenerating ? 'Working…' : primaryLabel}
         </button>
@@ -193,12 +194,13 @@ export default function TranscriptSummary({
         <section className="shrink-0" aria-live="polite" data-summary-requested={isSummaryRequested ? 'true' : 'false'}>
           {isGenerating && !summaryText ? <SummaryLoadingPanel /> : null}
           {!isGenerating && errorText ? (
-            <div className="min-h-[7.5rem] rounded-lg border border-[color-mix(in_srgb,#FF525240%,transparent)] bg-[color-mix(in_srgb,#FF525212%,var(--dash-surface-raised))] p-4">
+            <div className="relative min-h-[7.5rem] overflow-hidden rounded-lg border border-red-400/25 bg-[color-mix(in_srgb,#FF52520e%,rgba(0,0,0,0.4))] p-4 shadow-[inset_0_1px_0_rgba(255,82,82,0.1)]">
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-red-400/50 to-transparent" />
               <p className="text-sm leading-relaxed text-[#FFAB91]">{errorText}</p>
               <button
                 type="button"
                 onClick={onTryAgainAfterError}
-                className="mt-4 rounded-md bg-[var(--dash-surface)] px-3 py-2 text-xs font-semibold uppercase tracking-[0.1em] text-[#E0E0E0] ring-1 ring-white/[0.1] hover:bg-[var(--dash-surface-raised)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00E5FF]"
+                className="relative mt-4 overflow-hidden rounded-md border border-white/[0.09] bg-white/[0.04] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#E0E0E0] shadow-[inset_0_1px_0_rgba(255,255,255,0.07)] transition-all hover:bg-white/[0.07] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"
               >
                 Try again
               </button>
@@ -207,16 +209,17 @@ export default function TranscriptSummary({
           {summaryText !== null && !errorText ? (
             <div
               className={cn(
-                'min-h-[7.5rem] rounded-lg bg-[var(--dash-surface-raised)] p-4 ring-1 ring-white/[0.06]',
+                'relative min-h-[7.5rem] overflow-hidden rounded-lg border border-white/[0.07] bg-white/[0.02] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-sm',
                 isGenerating && 'opacity-55',
               )}
             >
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/25 to-transparent" />
               {isGenerating ? (
-                <p className="mb-3 text-center text-xs font-medium tracking-wide text-[var(--dash-text-secondary)] motion-safe:animate-pulse">
+                <p className="mb-3 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dash-text-secondary)] motion-safe:animate-pulse">
                   Refreshing summary from live transcript…
                 </p>
               ) : null}
-              <p className="dash-label mb-2">AI transcript summary</p>
+              <p className="dash-label mb-2 tracking-[0.14em]">AI transcript summary</p>
               <p className="font-sans text-sm font-normal leading-relaxed tracking-normal text-[#E0E0E0]">{summaryText}</p>
             </div>
           ) : null}
@@ -227,8 +230,9 @@ export default function TranscriptSummary({
         className="dash-card flex max-h-[min(34rem,60svh)] min-h-0 flex-1 flex-col overflow-hidden"
         aria-label="911 phone call transcript"
       >
-        <header className="dash-header-strip shrink-0 border-b border-white/[0.06] px-4 py-3">
-          <p className="dash-label">Call transcript</p>
+        <header className="relative shrink-0 overflow-hidden border-b border-white/[0.06] px-4 py-3">
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/20 to-transparent" />
+          <p className="dash-label tracking-[0.14em]">Call transcript</p>
           <p className="mt-1 text-sm font-semibold text-[var(--dash-text-primary)]">911 voice line · both sides</p>
           <p
             className="mt-1 font-data text-[11px] font-medium tabular-nums text-[var(--dash-text-secondary)]"
@@ -237,18 +241,6 @@ export default function TranscriptSummary({
             Local time <span className="text-[var(--dash-text-primary)]">{liveTime}</span>
           </p>
         </header>
-        <div className="shrink-0 border-b border-white/[0.06] px-4 py-2.5">
-          <div className="rounded-lg bg-[color-mix(in_srgb,var(--dash-accent)_10%,var(--dash-surface-raised))] px-3 py-2 ring-1 ring-[color-mix(in_srgb,var(--dash-accent)_22%,transparent)]">
-            <p className="dash-label text-[color-mix(in_srgb,var(--dash-accent)_70%,var(--dash-text-secondary))]">
-              Telephony ingest
-            </p>
-            <p className="mt-1 text-sm font-medium leading-snug text-[var(--dash-text-primary)]">
-              Raw lines below mirror dual-channel STT. Summaries use the backend ingest buffer — send{' '}
-              <span className="font-data text-[11px]">request.summary</span> over the telemetry WebSocket (Generate or
-              refresh above).
-            </p>
-          </div>
-        </div>
         <div className="relative min-h-0 flex-1">
           {showJumpToLatest ? (
             <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center px-4 pb-3 pt-8 [background:linear-gradient(to_top,var(--dash-bg)_40%,transparent)]">
@@ -266,6 +258,18 @@ export default function TranscriptSummary({
             onScroll={updateAutoScrollIntent}
             className="min-h-0 h-full max-h-full flex-1 overflow-y-auto overscroll-y-contain px-4 py-3"
           >
+            {ordered.length === 0 ? (
+              <div className="mb-4 rounded-lg bg-[color-mix(in_srgb,var(--dash-accent)_10%,var(--dash-surface-raised))] px-3 py-2 ring-1 ring-[color-mix(in_srgb,var(--dash-accent)_22%,transparent)]">
+                <p className="dash-label text-[color-mix(in_srgb,var(--dash-accent)_70%,var(--dash-text-secondary))]">
+                  Telephony ingest
+                </p>
+                <p className="mt-1 text-sm font-medium leading-snug text-[var(--dash-text-primary)]">
+                  Raw lines below mirror dual-channel STT. Summaries use the backend ingest buffer — send{' '}
+                  <span className="font-data text-[11px]">request.summary</span> over the telemetry WebSocket (Generate or
+                  refresh above). Waiting for dual-channel STT from the caller and dispatcher.
+                </p>
+              </div>
+            ) : null}
           {ordered.length === 0 ? (
             <p className="text-sm text-[var(--dash-text-secondary)]">No transcript lines yet.</p>
           ) : (
@@ -281,12 +285,11 @@ export default function TranscriptSummary({
                   >
                     <article
                       className={cn(
-                        'max-w-[82%] rounded-2xl px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] ring-1',
                         isDispatcher
-                          ? 'rounded-br-sm bg-[color-mix(in_srgb,#00E5FF_18%,var(--dash-surface-raised))] text-[#B2EBF2] ring-[color-mix(in_srgb,#00E5FF_28%,transparent)]'
+                          ? 'max-w-[82%] rounded-2xl rounded-br-sm bg-[color-mix(in_srgb,#00E5FF_16%,var(--dash-surface-raised))] px-3 py-2 text-right text-sm font-medium leading-relaxed text-[#B2EBF2] ring-1 ring-[color-mix(in_srgb,#00E5FF_28%,transparent)]'
                           : isAi
-                            ? 'rounded-bl-sm rounded-br-sm bg-[color-mix(in_srgb,var(--dash-accent)_14%,var(--dash-surface-raised))] text-[var(--dash-text-primary)] ring-[color-mix(in_srgb,var(--dash-accent)_24%,transparent)]'
-                            : 'rounded-bl-sm bg-[var(--dash-surface-raised)] text-[#E0E0E0] ring-white/[0.05]',
+                            ? 'max-w-[82%] rounded-2xl rounded-bl-sm rounded-br-sm bg-white/[0.04] px-3 py-2 text-sm font-medium leading-relaxed text-[var(--dash-text-secondary)] ring-1 ring-white/[0.06]'
+                            : 'max-w-[82%] rounded-2xl rounded-bl-sm bg-[var(--dash-surface-raised)] px-3 py-2 text-sm font-medium leading-relaxed text-[var(--dash-text-primary)] ring-1 ring-white/[0.05]',
                       )}
                     >
                       <p
@@ -313,7 +316,7 @@ export default function TranscriptSummary({
                       </p>
                       <p
                         className={cn(
-                          'mt-1 text-sm font-medium leading-relaxed',
+                          'mt-1',
                           isDispatcher && 'text-right',
                         )}
                       >
