@@ -25,12 +25,14 @@ function FallbackTelemetryVideo({
   posterUrl,
   streamStatus = 'connected',
   wsLatencyMs = null,
+  fillHeight = false,
 }: {
   src?: string | null
   streamUrl?: string | null
   posterUrl?: string | null
   streamStatus?: VideoTelemetry['streamStatus']
   wsLatencyMs?: number | null
+  fillHeight?: boolean
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const shellRef = useRef<HTMLDivElement>(null)
@@ -171,7 +173,10 @@ function FallbackTelemetryVideo({
   const videoShell = (
     <div
       ref={shellRef}
-      className={cn('dash-inset relative aspect-video w-full overflow-hidden bg-[var(--dash-bg)]')}
+      className={cn(
+        'dash-inset relative w-full overflow-hidden bg-[var(--dash-bg)]',
+        fillHeight ? 'min-h-0 flex-1' : 'aspect-video',
+      )}
     >
       <video
         ref={videoRef}
@@ -237,6 +242,7 @@ function FallbackTelemetryVideo({
       ref={dragNodeRef}
       className={cn(
         'dash-card w-full p-3',
+        fillHeight && !floating && 'flex min-h-0 flex-1 flex-col',
         floating &&
           'fixed left-[min(8vw,48px)] top-[min(14vh,120px)] z-[920] w-[min(440px,calc(100vw-24px))] cursor-grab shadow-[0_28px_90px_rgba(0,0,0,0.72)] ring-2 ring-[color-mix(in_srgb,#00E5FF_22%,transparent)] active:cursor-grabbing',
       )}
@@ -303,10 +309,12 @@ function LiveKitCallerVideo({
   wsLatencyMs = null,
   posterUrl,
   streamStatus = 'connected',
+  fillHeight = false,
 }: {
   wsLatencyMs?: number | null
   posterUrl?: string | null
   streamStatus?: VideoTelemetry['streamStatus']
+  fillHeight?: boolean
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
@@ -515,7 +523,13 @@ function LiveKitCallerVideo({
   const showStreamChip = streamEstablished
 
   const videoShell = (
-    <div ref={shellRef} className="dash-inset relative aspect-video w-full overflow-hidden bg-[var(--dash-bg)]">
+    <div
+      ref={shellRef}
+      className={cn(
+        'dash-inset relative w-full overflow-hidden bg-[var(--dash-bg)]',
+        fillHeight ? 'min-h-0 flex-1' : 'aspect-video',
+      )}
+    >
       {/*
         Video track only: keep this element muted so autoplay is allowed; caller audio is played via `<audio>` below.
       */}
@@ -673,6 +687,7 @@ function LiveKitCallerVideo({
       ref={dragNodeRef}
       className={cn(
         'dash-card w-full p-3',
+        fillHeight && !floating && 'flex min-h-0 flex-1 flex-col',
         floating &&
           'fixed left-[min(8vw,48px)] top-[min(14vh,120px)] z-[920] w-[min(440px,calc(100vw-24px))] cursor-grab shadow-[0_28px_90px_rgba(0,0,0,0.72)] ring-2 ring-[color-mix(in_srgb,#00E5FF_22%,transparent)] active:cursor-grabbing',
       )}
@@ -741,6 +756,8 @@ interface VideoPlayerProps {
   streamStatus?: VideoTelemetry['streamStatus']
   /** Telemetry WebSocket RTT; LiveKit path prefers signal RTT when connected. */
   wsLatencyMs?: number | null
+  /** Stretch video vertically to fill the dashboard column (drops fixed 16:9 letterboxing). */
+  fillHeight?: boolean
 }
 
 export default function VideoPlayer({
@@ -749,20 +766,27 @@ export default function VideoPlayer({
   posterUrl,
   streamStatus,
   wsLatencyMs = null,
+  fillHeight = false,
 }: VideoPlayerProps) {
-  if (shouldUseLiveKit()) {
-    return (
-      <LiveKitCallerVideo wsLatencyMs={wsLatencyMs} posterUrl={posterUrl} streamStatus={streamStatus} />
-    )
-  }
-
-  return (
+  const inner = shouldUseLiveKit() ? (
+    <LiveKitCallerVideo
+      wsLatencyMs={wsLatencyMs}
+      posterUrl={posterUrl}
+      streamStatus={streamStatus}
+      fillHeight={fillHeight}
+    />
+  ) : (
     <FallbackTelemetryVideo
       src={src}
       streamUrl={streamUrl}
       posterUrl={posterUrl}
       streamStatus={streamStatus}
       wsLatencyMs={wsLatencyMs}
+      fillHeight={fillHeight}
     />
   )
+
+  if (!fillHeight) return inner
+
+  return <div className="flex min-h-0 flex-1 flex-col">{inner}</div>
 }

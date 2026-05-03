@@ -105,10 +105,11 @@ export default function IncidentFeedPage() {
         </h1>
 
         <p className="mt-10 max-w-sm text-[15px] leading-relaxed text-neutral-500">
-          When you continue, you&apos;ll open a secure video link so dispatch can
-          see what&apos;s happening and guide you. Your browser will ask to share
-          location so responders know where you are (you can decline and still try
-          to connect).
+          When you continue, you&apos;ll join a secure voice link with emergency
+          services. Dispatch may ask you to turn on video (similar to FaceTime) so
+          they can see what&apos;s happening — you&apos;ll choose whether to allow
+          it. Your browser may ask to share location so responders know where you
+          are (you can decline and still try to connect).
         </p>
 
         <p className="mt-4 max-w-sm text-[15px] leading-relaxed text-neutral-500">
@@ -121,7 +122,7 @@ export default function IncidentFeedPage() {
           disabled={connecting}
           className="mt-12 min-w-[220px] rounded-full bg-neutral-900 px-10 py-3.5 text-[15px] font-medium text-white shadow-sm transition hover:bg-neutral-800 disabled:opacity-50"
         >
-          {connecting ? "Connecting…" : "Connect to dispatch"}
+          {connecting ? "Connecting…" : "Connect to emergency service."}
         </button>
 
         {connectError ? (

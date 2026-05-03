@@ -9,6 +9,9 @@ interface CallerLocationMapPanelProps {
   location: CallerLocationTelemetry
   wsConnected?: boolean
   onRefreshLocation?: () => void
+  /** Narrow sidebar layout: shorter map chrome and fixed map height. */
+  compact?: boolean
+  className?: string
 }
 
 function hasValidCoords(location: CallerLocationTelemetry): boolean {
@@ -125,6 +128,8 @@ export default function CallerLocationMapPanel({
   location,
   wsConnected = false,
   onRefreshLocation,
+  compact = false,
+  className,
 }: CallerLocationMapPanelProps) {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const hasCoords = hasValidCoords(location)
@@ -151,11 +156,30 @@ export default function CallerLocationMapPanel({
   const showRefresh = typeof onRefreshLocation === 'function'
 
   return (
-    <section className="dash-card flex min-h-0 flex-1 flex-col p-3" aria-label="Caller location map">
-      <div className={cn(showRefresh && 'flex flex-wrap items-start justify-between gap-3')}>
-        <div>
+    <section
+      className={cn(
+        'dash-card flex flex-col',
+        compact ? 'shrink-0 p-2' : 'min-h-0 flex-1 p-3',
+        className,
+      )}
+      aria-label="Caller location map"
+    >
+      <div
+        className={cn(
+          showRefresh && 'flex flex-wrap items-start justify-between gap-2',
+          compact && 'gap-2',
+        )}
+      >
+        <div className="min-w-0">
           <p className="dash-label tracking-[0.14em]">Caller location</p>
-          <p className="mt-1 text-lg font-bold leading-snug text-[var(--dash-text-primary)]">{location.label}</p>
+          <p
+            className={cn(
+              'mt-0.5 font-bold leading-snug text-[var(--dash-text-primary)]',
+              compact ? 'line-clamp-2 text-xs' : 'mt-1 text-lg',
+            )}
+          >
+            {location.label}
+          </p>
         </div>
         {showRefresh ? (
           <button
@@ -163,14 +187,22 @@ export default function CallerLocationMapPanel({
             disabled={!wsConnected || isRefreshing}
             onClick={handleRefresh}
             title={wsConnected ? undefined : 'Connect to telemetry to refresh fused GPS'}
-            className="rounded-md bg-[var(--dash-surface-raised)] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--dash-text-primary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ring-white/[0.1] hover:bg-[color-mix(in_srgb,var(--dash-surface-raised)_90%,#fff)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00E5FF] disabled:pointer-events-none disabled:opacity-45"
+            className={cn(
+              'shrink-0 rounded-md bg-[var(--dash-surface-raised)] font-semibold uppercase tracking-[0.12em] text-[var(--dash-text-primary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ring-white/[0.1] hover:bg-[color-mix(in_srgb,var(--dash-surface-raised)_90%,#fff)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00E5FF] disabled:pointer-events-none disabled:opacity-45',
+              compact ? 'px-2 py-1 text-[9px]' : 'px-3 py-2 text-[11px]',
+            )}
           >
-            {isRefreshing ? 'Refreshing…' : 'Refresh location'}
+            {isRefreshing ? 'Refreshing…' : compact ? 'Refresh' : 'Refresh location'}
           </button>
         ) : null}
       </div>
 
-      <div className="relative mt-2 min-h-0 flex-1 overflow-hidden rounded-lg bg-[var(--dash-bg)] ring-1 ring-white/[0.06]">
+      <div
+        className={cn(
+          'relative overflow-hidden rounded-lg bg-[var(--dash-bg)] ring-1 ring-white/[0.06]',
+          compact ? 'mt-1.5 h-[132px]' : 'mt-2 min-h-0 flex-1',
+        )}
+      >
         {mapsKey && center ? (
           <GoogleMapEmbed center={center} accuracyM={location.accuracy_m} />
         ) : (
@@ -184,8 +216,18 @@ export default function CallerLocationMapPanel({
         )}
 
         {hasCoords ? (
-          <div className="pointer-events-none absolute bottom-0 left-0 right-0 bg-[color-mix(in_srgb,var(--dash-bg)_82%,transparent)] px-3 py-2 backdrop-blur-md">
-            <div className="flex flex-wrap items-baseline gap-x-5 gap-y-0.5 font-data text-[13px] font-bold tabular-nums text-[var(--dash-text-primary)]">
+          <div
+            className={cn(
+              'pointer-events-none absolute bottom-0 left-0 right-0 bg-[color-mix(in_srgb,var(--dash-bg)_82%,transparent)] backdrop-blur-md',
+              compact ? 'px-2 py-1' : 'px-3 py-2',
+            )}
+          >
+            <div
+              className={cn(
+                'flex flex-wrap items-baseline gap-x-5 gap-y-0.5 font-data font-bold tabular-nums text-[var(--dash-text-primary)]',
+                compact ? 'gap-x-3 text-[10px]' : 'text-[13px]',
+              )}
+            >
               <span>
                 <span className="mr-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dash-text-secondary)]">Lat</span>
                 {latLabel}

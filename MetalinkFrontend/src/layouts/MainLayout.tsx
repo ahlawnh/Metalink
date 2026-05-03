@@ -1,5 +1,5 @@
 import CallerLocationMapPanel from '@/components/dashboard/CallerLocationMapPanel'
-import DeployViaSmsPanel from '@/components/dashboard/DeployViaSmsPanel'
+import DeployVideoCallPanel from '@/components/dashboard/DeployVideoCallPanel'
 import HazardList from '@/components/dashboard/HazardList'
 import SystemAlertsPanel from '@/components/dashboard/SystemAlertsPanel'
 import VitalsTelemetryCards from '@/components/dashboard/VitalsTelemetryCards'
@@ -102,6 +102,12 @@ export function MainLayout() {
           <div className="dash-card shrink-0 p-3">
             <HazardList hazards={telemetry.hazards} />
           </div>
+          <CallerLocationMapPanel
+            compact
+            location={telemetry.caller_location}
+            onRefreshLocation={requestCallerLocationRefresh}
+            wsConnected={connectionState === 'connected'}
+          />
           <VitalsTelemetryCards
             patient={telemetry.patient_heart}
             respiratory={telemetry.respiratory}
@@ -113,11 +119,11 @@ export function MainLayout() {
           <SystemAlertsPanel alerts={telemetry.systemAlerts} />
         </aside>
 
-        <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
+        <section className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(0,229,255,0.10),transparent_55%)]" />
           <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] opacity-60" />
-          <div className="relative flex min-h-0 flex-1 flex-col gap-3 p-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06),inset_0_18px_48px_rgba(0,0,0,0.55)]">
-            <div className="pointer-events-none absolute left-5 top-5 z-30 max-w-[min(36rem,calc(100%-3rem))] overflow-hidden rounded-lg border border-white/[0.09] bg-black/60 px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.07),0_20px_52px_rgba(0,0,0,0.55)] backdrop-blur-md">
+          <div className="relative flex min-h-0 flex-1 flex-col p-2 pt-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06),inset_0_18px_48px_rgba(0,0,0,0.55)]">
+            <div className="pointer-events-none absolute left-4 top-4 z-30 max-w-[min(36rem,calc(100%-2rem))] overflow-hidden rounded-lg border border-white/[0.09] bg-black/60 px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.07),0_20px_52px_rgba(0,0,0,0.55)] backdrop-blur-md">
               <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/35 to-transparent" />
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <p className="dash-label tracking-[0.16em] text-cyan-100/70">Scene intelligence</p>
@@ -129,19 +135,13 @@ export function MainLayout() {
                 {telemetry.hazards[0]?.description || 'Live caller POV and fused location telemetry active.'}
               </p>
             </div>
-            <div className="min-h-0 flex-[3] overflow-hidden rounded-xl border border-white/10 bg-black/30 shadow-[0_22px_70px_rgba(0,0,0,0.5)]">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/10 bg-black/30 shadow-[0_22px_70px_rgba(0,0,0,0.5)]">
               <VideoPlayer
+                fillHeight
                 streamUrl={telemetry.video.streamUrl}
                 posterUrl={telemetry.video.posterUrl}
                 streamStatus={telemetry.video.streamStatus}
                 wsLatencyMs={wsLatencyMs}
-              />
-            </div>
-            <div className="min-h-0 flex-[2] shrink-0 overflow-hidden rounded-xl border border-white/10 bg-black/30 shadow-[0_16px_54px_rgba(0,0,0,0.42)] [&>section]:h-full">
-              <CallerLocationMapPanel
-                location={telemetry.caller_location}
-                onRefreshLocation={requestCallerLocationRefresh}
-                wsConnected={connectionState === 'connected'}
               />
             </div>
           </div>
@@ -154,7 +154,7 @@ export function MainLayout() {
               transcript
             </span>
           </div>
-          <DeployViaSmsPanel />
+          <DeployVideoCallPanel />
           <TranscriptSummary
             chunks={telemetry.transcript}
             requestRollingSummary={requestRollingSummary}

@@ -20,9 +20,14 @@ type Args = {
   callStartedAt: number;
   location: IncidentLocationSnapshot | null;
   vitals: IncidentVitalsSnapshot;
+  /** Backend returns monotonic `video_deploy_seq` when dispatch cues camera/vitals. */
+  onVideoDeploySeq?: (seq: number) => void;
 };
 
-function postBatch(body: IncidentTelemetryBatch) {
+async function postBatch(
+  body: IncidentTelemetryBatch,
+  onVideoDeploySeq?: (seq: number) => void
+) {
   const json = JSON.stringify(body);
   try {
     if (typeof sessionStorage !== "undefined") {
@@ -32,11 +37,19 @@ function postBatch(body: IncidentTelemetryBatch) {
     /* ignore quota */
   }
 
-  void fetch("/api/incident/telemetry", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: json,
-  }).catch(() => {});
+  try {
+    const res = await fetch("/api/incident/telemetry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: json,
+    });
+    const data = (await res.json()) as { video_deploy_seq?: unknown };
+    const seq =
+      typeof data.video_deploy_seq === "number" ? data.video_deploy_seq : 0;
+    onVideoDeploySeq?.(seq);
+  } catch {
+    /* unreachable proxy */
+  }
 }
 
 /**
@@ -64,17 +77,11 @@ export function useIncidentTelemetryReporter(args: Args) {
         location: a.location,
         vitals: a.vitals,
       };
-      postBatch(batch);
+      void postBatch(batch, a.onVideoDeploySeq);
     };
 
     tick();
     const id = window.setInterval(tick, FLUSH_MS);
     return () => window.clearInterval(id);
-  }, [
-    args.enabled,
-    args.sessionId,
-    args.roomName,
-    args.livekitIdentity,
-    args.callStartedAt,
-  ]);
+  }, [args.enabled, args.sessionId, args.roomName, args.livekitIdentity, args.callStartedAt]);
 }

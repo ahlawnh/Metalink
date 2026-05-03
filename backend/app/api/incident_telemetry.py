@@ -4,7 +4,7 @@ import time
 from datetime import datetime
 from typing import Any, Literal
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.schemas.telemetry import (
@@ -25,6 +25,9 @@ router = APIRouter(tags=["incident"])
 # In-memory ring buffer for local dev & handoff to Alan/Alex (replace with DB / queue).
 _MAX = 200
 _recent: list[dict[str, Any]] = []
+
+# Dispatcher “deploy video call” — bumped per POST `/incident/video-deploy`; incident_feed polls / reads seq via telemetry.
+_video_deploy_seq: dict[str, int] = {}
 
 
 class VitalsIn(BaseModel):
@@ -145,6 +148,25 @@ def _incident_to_telemetry(body: IncidentTelemetryIn) -> TelemetryUpdate:
     )
 
 
+def _resolve_latest_session_id() -> str | None:
+    for row in reversed(_recent):
+        sid = str(row.get("sessionId") or "").strip()
+        if len(sid) >= 8:
+            return sid
+    return None
+
+
+def _video_deploy_sequence(session_id: str) -> int:
+    return _video_deploy_seq.get(session_id.strip(), 0)
+
+
+def bump_video_deploy(session_id: str) -> int:
+    sid = session_id.strip()
+    cur = _video_deploy_seq.get(sid, 0) + 1
+    _video_deploy_seq[sid] = cur
+    return cur
+
+
 @router.post("/incident/session/start")
 async def incident_session_start(session_id: str = Query(default="", description="Client session id for logs")) -> dict[str, Any]:
     """New bystander session — resume STT ingestion (after a prior session/end pause)."""
@@ -185,7 +207,37 @@ async def ingest_incident_telemetry(body: IncidentTelemetryIn) -> dict[str, Any]
     if len(_recent) > _MAX:
         del _recent[: len(_recent) - _MAX]
     await broadcast_telemetry(_incident_to_telemetry(body))
-    return {"ok": True, "buffered": len(_recent)}
+    sid = body.sessionId.strip()
+    return {
+        "ok": True,
+        "buffered": len(_recent),
+        "video_deploy_seq": _video_deploy_sequence(sid),
+    }
+
+
+@router.post("/incident/video-deploy")
+async def incident_video_deploy(
+    session_id: str = Query(default="", description="Optional caller session UUID; omit to target latest telemetry"),
+) -> dict[str, Any]:
+    """
+    Dispatcher action: bump video-deploy sequence for the active caller session so the PWA can prompt for camera + vitals.
+    """
+    sid = session_id.strip() if session_id.strip() else (_resolve_latest_session_id() or "").strip()
+    if not sid:
+        raise HTTPException(
+            status_code=404,
+            detail="No active caller session — wait for incident telemetry from the bystander device.",
+        )
+    seq = bump_video_deploy(sid)
+    return {"ok": True, "session_id": sid, "video_deploy_seq": seq}
+
+
+@router.get("/incident/video-deploy/status")
+async def incident_video_deploy_status(
+    session_id: str = Query(..., min_length=8, description="Incident session id from caller PWA"),
+) -> dict[str, Any]:
+    sid = session_id.strip()
+    return {"ok": True, "session_id": sid, "video_deploy_seq": _video_deploy_sequence(sid)}
 
 
 @router.get("/incident/telemetry/recent")
