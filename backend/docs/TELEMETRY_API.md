@@ -31,6 +31,16 @@ After connect, the client typically receives:
 While connected, the server sends **`heartbeat`** on idle timeout (`HEARTBEAT_INTERVAL_SECONDS`).  
 Alex’s ingestion loop publishes **`telemetry.update`** (and optional **`alert.critical`**) to **all** connected clients.
 
+### Client → server (summary on demand)
+
+The client may send JSON frames (no envelope required) to request a fresh GPT rolling summary from the current ingest transcript buffer:
+
+```json
+{ "event_type": "request.summary" }
+```
+
+The server responds with **`telemetry.summary_updated`** (see below). Summary generation runs in a background task so the WebSocket keepalive / receive loop is not blocked by the OpenAI call.
+
 ### Envelope (every WebSocket message)
 
 All frames are JSON objects:
@@ -47,6 +57,7 @@ All frames are JSON objects:
 - **`schema_version`:** Always **`v2`** for this contract revision.
 - **`event_type`:** One of:
   - `telemetry.update` — `payload` is a **TelemetryUpdate**
+  - `telemetry.summary_updated` — `payload` is **`{ "rolling_summary": string }`** (reply to **`request.summary`**; not debounced with telemetry coalescing)
   - `alert.critical` — `payload` is a **CriticalAlert** (may duplicate alerts also listed inside `telemetry.update.critical_alerts`)
   - `pipeline.status` — `payload` is **PipelineStatusUpdate**
   - `heartbeat` — `payload` is **Heartbeat**
@@ -63,6 +74,7 @@ All frames are JSON objects:
 | `resp_rate_estimate` | `{ "value"?, "method", "confidence" }` | |
 | `consciousness_level` | enum | `responsive`, `unresponsive`, `unknown` |
 | `transcript_snippet` | string | Truncated rolling transcript |
+| `rolling_summary` | string | Often empty on push **`telemetry.update`** frames; use **`telemetry.summary_updated`** after sending **`request.summary`** for GPT-5.4-mini summary text |
 | `pipeline_status` | enum | `mock`, `degraded`, `live` |
 | `critical_alerts` | array of CriticalAlert | |
 | `bystander_stress` | optional object | `{ "score", "label"?, "confidence" }` |

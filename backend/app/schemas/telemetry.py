@@ -16,6 +16,7 @@ def utc_now() -> datetime:
 
 class EventType(str, Enum):
     TELEMETRY_UPDATE = "telemetry.update"
+    TELEMETRY_SUMMARY_UPDATED = "telemetry.summary_updated"
     ALERT_CRITICAL = "alert.critical"
     PIPELINE_STATUS = "pipeline.status"
     HEARTBEAT = "heartbeat"
@@ -117,6 +118,7 @@ class TelemetryUpdate(BaseModel):
     resp_rate_estimate: RespRateEstimate = Field(default_factory=RespRateEstimate)
     consciousness_level: ConsciousnessLevel = ConsciousnessLevel.UNKNOWN
     transcript_snippet: str = ""
+    rolling_summary: str = ""
     pipeline_status: PipelineStatus = PipelineStatus.MOCK
     critical_alerts: list[CriticalAlert] = Field(default_factory=list)
     # V3 / winning-edge optional fields (services may omit; frontend treats as optional)
@@ -140,8 +142,20 @@ class Heartbeat(BaseModel):
     connected_clients: int = Field(ge=0)
 
 
+class RollingSummaryPayload(BaseModel):
+    """On-demand GPT rolling summary (see client message `request.summary`)."""
+
+    rolling_summary: str = ""
+
+
 class WebSocketEvent(BaseModel):
     schema_version: Literal["v2"] = SCHEMA_VERSION
     event_type: EventType
     timestamp: datetime = Field(default_factory=utc_now)
-    payload: Union[TelemetryUpdate, PipelineStatusUpdate, CriticalAlert, Heartbeat]
+    payload: Union[
+        TelemetryUpdate,
+        PipelineStatusUpdate,
+        CriticalAlert,
+        Heartbeat,
+        RollingSummaryPayload,
+    ]

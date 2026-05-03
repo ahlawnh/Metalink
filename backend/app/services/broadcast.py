@@ -153,6 +153,7 @@ def telemetry_from_service_payload(payload: dict[str, Any]) -> TelemetryUpdate:
         ),
         consciousness_level=_map_consciousness(payload.get("patient_status"), transcript),
         transcript_snippet=transcript,
+        rolling_summary=str(payload.get("rolling_summary") or ""),
         pipeline_status=_pipeline_status(),
         critical_alerts=critical_alerts,
         bystander_stress=_optional_bystander_stress(payload.get("bystander_stress")),
