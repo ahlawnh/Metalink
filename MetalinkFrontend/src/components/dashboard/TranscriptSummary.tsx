@@ -73,8 +73,10 @@ export default function TranscriptSummary({
 
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const shouldAutoScrollRef = useRef(true)
+  /** Only scroll the transcript panel when user is already near the bottom (see updateAutoScrollIntent). Starts false so the page does not jump on load. */
+  const shouldAutoScrollRef = useRef(false)
+  const prevLastTranscriptIdRef = useRef<string>('')
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false)
   const lastTranscriptId = ordered.at(-1)?.id ?? ''
 
   const clearSummaryTimeout = useCallback(() => {
@@ -123,18 +125,52 @@ export default function TranscriptSummary({
 
   const updateAutoScrollIntent = useCallback(() => {
     const container = containerRef.current
-    if (!container) {
-      shouldAutoScrollRef.current = true
-      return
-    }
+    if (!container) return
 
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
     shouldAutoScrollRef.current = distanceFromBottom <= TRANSCRIPT_AUTO_SCROLL_THRESHOLD_PX
   }, [])
 
+  const scrollTranscriptContainerToBottom = useCallback(() => {
+    const el = containerRef.current
+    if (!el) return
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight - el.clientHeight
+    })
+  }, [])
+
+  const onJumpToLatest = useCallback(() => {
+    shouldAutoScrollRef.current = true
+    scrollTranscriptContainerToBottom()
+    setShowJumpToLatest(false)
+  }, [scrollTranscriptContainerToBottom])
+
   useEffect(() => {
-    if (ordered.length === 0 || !shouldAutoScrollRef.current) return
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    const el = containerRef.current
+    if (ordered.length === 0) {
+      prevLastTranscriptIdRef.current = ''
+      setShowJumpToLatest(false)
+      return
+    }
+
+    const currentLastId = ordered.at(-1)?.id ?? ''
+    const hadPrevious = prevLastTranscriptIdRef.current !== ''
+    const isNewTail = hadPrevious && currentLastId !== prevLastTranscriptIdRef.current
+    prevLastTranscriptIdRef.current = currentLastId
+
+    if (shouldAutoScrollRef.current && el) {
+      const raf = requestAnimationFrame(() => {
+        el.scrollTop = el.scrollHeight - el.clientHeight
+      })
+      setShowJumpToLatest(false)
+      return () => cancelAnimationFrame(raf)
+    }
+
+    if (isNewTail && !shouldAutoScrollRef.current) {
+      setShowJumpToLatest(true)
+    }
+
+    return undefined
   }, [lastTranscriptId, ordered.length])
 
   const primaryLabel = summaryText ? 'Refresh transcript summary' : 'Generate AI Summary'
@@ -213,11 +249,23 @@ export default function TranscriptSummary({
             </p>
           </div>
         </div>
-        <div
-          ref={containerRef}
-          onScroll={updateAutoScrollIntent}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 py-3"
-        >
+        <div className="relative min-h-0 flex-1">
+          {showJumpToLatest ? (
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center px-4 pb-3 pt-8 [background:linear-gradient(to_top,var(--dash-bg)_40%,transparent)]">
+              <button
+                type="button"
+                onClick={onJumpToLatest}
+                className="pointer-events-auto rounded-full bg-[color-mix(in_srgb,var(--dash-accent)_22%,var(--dash-surface-raised))] px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--dash-text-primary)] ring-1 ring-[color-mix(in_srgb,var(--dash-accent)_40%,transparent)] shadow-lg transition hover:bg-[color-mix(in_srgb,var(--dash-accent)_32%,var(--dash-surface-raised))] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00E5FF]"
+              >
+                Jump to latest
+              </button>
+            </div>
+          ) : null}
+          <div
+            ref={containerRef}
+            onScroll={updateAutoScrollIntent}
+            className="min-h-0 h-full max-h-full flex-1 overflow-y-auto overscroll-y-contain px-4 py-3"
+          >
           {ordered.length === 0 ? (
             <p className="text-sm text-[var(--dash-text-secondary)]">No transcript lines yet.</p>
           ) : (
@@ -275,11 +323,9 @@ export default function TranscriptSummary({
                   </li>
                 )
               })}
-              <li aria-hidden="true">
-                <div ref={messagesEndRef} />
-              </li>
             </ul>
           )}
+          </div>
         </div>
       </section>
     </div>

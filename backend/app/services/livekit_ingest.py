@@ -219,6 +219,47 @@ async def run_ingestion_loop(
     video_tracks: list[Any] = []
     transcript_tasks: dict[TranscriptSpeaker, asyncio.Task[None]] = {}
     tasks: list[asyncio.Task[None]] = []
+    vision_loop_started = False
+
+    loop = asyncio.get_running_loop()
+
+    def _try_start_vision_loop(*, deferred: bool) -> None:
+        """Start at most one vision task when a camera track is available (early or after audio)."""
+        nonlocal vision_loop_started
+        if vision_loop_started:
+            return
+        picked = _pick_preferred_camera_video_track(video_tracks)
+        if picked is None:
+            return
+        vision_loop_started = True
+        label = (
+            "starting vision loop (deferred, after audio)"
+            if deferred
+            else f"starting vision loop (sample every {cfg.frame_sample_interval_s}s)"
+        )
+        vmsg = f"[ingest-debug] {label} openai_model={openai_model!r}"
+        logger.info(vmsg)
+        print(vmsg, flush=True)
+        tasks.append(
+            asyncio.create_task(
+                _vision_loop_from_livekit_track(
+                    state=state,
+                    video_track=picked,
+                    interval_s=cfg.frame_sample_interval_s,
+                    openai_model=openai_model,
+                    frame_max_width=frame_max_width,
+                )
+            )
+        )
+
+    def _schedule_try_start_vision_loop(*, deferred: bool) -> None:
+        def _run() -> None:
+            try:
+                _try_start_vision_loop(deferred=deferred)
+            except Exception:
+                logger.exception("[ingest-debug] _try_start_vision_loop failed")
+
+        loop.call_soon_threadsafe(_run)
 
     def on_track_subscribed(track: Any, *args: Any) -> None:
         kind = getattr(track, "kind", None)
@@ -234,6 +275,8 @@ async def run_ingestion_loop(
             logger.info(msg)
             print(msg, flush=True)
             video_tracks.append(track)
+            # Audio may have unlocked the wait loop first; start vision when video arrives later.
+            _schedule_try_start_vision_loop(deferred=True)
         elif kind == rtc.TrackKind.KIND_AUDIO:
             identity = _identity_from_track_args(args)
             speaker = classify_livekit_audio_participant(identity, backend_identity=cfg.identity)
@@ -261,32 +304,18 @@ async def run_ingestion_loop(
             raise RuntimeError("Timed out waiting for LiveKit tracks.")
         await asyncio.sleep(0.1)
 
-    video_track = _pick_preferred_camera_video_track(video_tracks)
-    if video_track is None:
+    if not video_tracks:
         w = (
-            "[ingest-debug] WARNING: no remote VIDEO track after wait — OpenAI vision will NOT run. "
-            "Common causes: camera off, publisher video not started, or wrong room. "
+            "[ingest-debug] No remote VIDEO track yet (audio or other tracks present). "
+            "OpenAI vision will start automatically when a camera track is subscribed. "
+            "If it never starts: camera off, publisher video not started, or wrong room. "
             f"audio_tracks_started={list(transcript_tasks.keys())!r}"
         )
         logger.warning(w)
         print(w, flush=True)
-    else:
-        vmsg = f"[ingest-debug] starting vision loop (sample every {cfg.frame_sample_interval_s}s) openai_model={openai_model!r}"
-        logger.info(vmsg)
-        print(vmsg, flush=True)
 
-    if video_track is not None:
-        tasks.append(
-            asyncio.create_task(
-                _vision_loop_from_livekit_track(
-                    state=state,
-                    video_track=video_track,
-                    interval_s=cfg.frame_sample_interval_s,
-                    openai_model=openai_model,
-                    frame_max_width=frame_max_width,
-                )
-            )
-        )
+    # Video may already be in video_tracks (e.g. video before audio). Callback path handles late video.
+    _try_start_vision_loop(deferred=False)
 
     try:
         await asyncio.gather(*tasks)
@@ -358,17 +387,17 @@ async def _vision_loop_from_livekit_track(
     print("[ingest-debug] VideoStream opened; sampling frames for vision", flush=True)
     try:
         async for event in stream:
+            print("🚨 RAW FRAME RECEIVED FROM STREAM", flush=True)
             now = time.time()
             if now - last < interval_s:
                 continue
-            last = now
 
             vf = event.frame
             try:
                 rgb = vf.convert(rtc.VideoBufferType.RGB24)
-            except Exception as conv_exc:
-                logger.warning("[ingest-debug] vf.convert(RGB24) failed (skipping frame): %s", conv_exc, exc_info=True)
-                print(f"[ingest-debug] vf.convert(RGB24) FAILED: {conv_exc!r}", flush=True)
+            except Exception:
+                logger.exception("[ingest-debug] vf.convert(RGB24) failed (skipping frame)")
+                print("[ingest-debug] vf.convert(RGB24) FAILED (see logs)", flush=True)
                 continue
 
             try:
@@ -378,14 +407,15 @@ async def _vision_loop_from_livekit_track(
                 buf = BytesIO()
                 im.save(buf, format="JPEG", quality=85, optimize=True)
                 jpeg_bytes = buf.getvalue()
-            except Exception as pil_exc:
-                logger.warning("[ingest-debug] PIL JPEG encode failed (skipping frame): %s", pil_exc, exc_info=True)
-                print(f"[ingest-debug] PIL JPEG encode FAILED: {pil_exc!r}", flush=True)
+            except Exception:
+                logger.exception("[ingest-debug] PIL JPEG encode failed (skipping frame)")
+                print("[ingest-debug] PIL JPEG encode FAILED (see logs)", flush=True)
                 continue
 
             jpeg_bytes = await _downscale_jpeg_to_max_width(jpeg_bytes, max_width=frame_max_width)
             frame_b64 = base64.b64encode(jpeg_bytes).decode("ascii")
             frame_tick += 1
+            last = now
 
             pre = (
                 f"[ingest-debug] ABOUT TO CALL analyze_frame_with_gpt54 tick={frame_tick} "
@@ -396,7 +426,11 @@ async def _vision_loop_from_livekit_track(
             print(pre, flush=True)
 
             try:
-                vr: VisionResult = await analyze_frame_with_gpt54(frame_b64_jpeg=frame_b64, model=openai_model)
+                vr: VisionResult = await analyze_frame_with_gpt54(
+                    frame_b64_jpeg=frame_b64,
+                    model=openai_model,
+                    mock_ai=False,
+                )
             except Exception as vision_exc:
                 logger.exception("[ingest-debug] analyze_frame_with_gpt54 FAILED tick=%s", frame_tick)
                 print(f"[ingest-debug] analyze_frame_with_gpt54 FAILED tick={frame_tick}: {vision_exc!r}", flush=True)

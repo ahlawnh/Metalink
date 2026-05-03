@@ -15,6 +15,7 @@
     "history_rr": []
   },
   "hazards": [],
+  "systemAlerts": [],
   "transcript": [],
   "transcript_ai_summary": {
     "status": "idle",

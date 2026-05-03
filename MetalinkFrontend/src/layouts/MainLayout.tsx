@@ -1,4 +1,6 @@
 import CallerLocationMapPanel from '@/components/dashboard/CallerLocationMapPanel'
+import HazardList from '@/components/dashboard/HazardList'
+import SystemAlertsPanel from '@/components/dashboard/SystemAlertsPanel'
 import VitalsTelemetryCards from '@/components/dashboard/VitalsTelemetryCards'
 import TranscriptSummary from '@/components/dashboard/TranscriptSummary'
 import VideoPlayer from '@/components/dashboard/VideoPlayer'
@@ -15,50 +17,50 @@ export function MainLayout() {
     setCprGuidance,
   } = useTelemetryStream()
 
-  const connectionTone =
+  const connectionLabel =
     connectionState === 'connected'
-      ? 'border-[color-mix(in_srgb,#00FF8840%,transparent)] bg-[color-mix(in_srgb,#00FF8812%,var(--dash-surface-raised))] text-[#9BE89E]'
+      ? 'Live'
       : connectionState === 'connecting'
-        ? 'border-[color-mix(in_srgb,var(--dash-accent)_40%,transparent)] bg-[color-mix(in_srgb,var(--dash-accent)_10%,var(--dash-surface-raised))] text-[var(--dash-accent)]'
-        : 'border-[color-mix(in_srgb,#FF525240%,transparent)] bg-[color-mix(in_srgb,#FF525212%,var(--dash-surface-raised))] text-[#FFAB91]'
-
-  const dotTone =
-    connectionState === 'connected'
-      ? 'bg-[#00FF88]'
-      : connectionState === 'connecting'
-        ? 'animate-pulse bg-[var(--dash-accent)]'
-        : 'bg-[#FF5252]'
+        ? 'Connecting…'
+        : 'Fallback'
 
   return (
-    <main className="grid min-h-dvh grid-cols-1 gap-6 bg-[var(--dash-bg)] p-4 text-[var(--dash-text-primary)] lg:grid-cols-2">
-      {/* Half screen: body-cam POV + caller location */}
-      <div className="flex min-h-0 flex-col gap-4 lg:min-h-dvh">
-        <header className="dash-header-strip shrink-0 px-4 py-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="dash-label text-[color-mix(in_srgb,var(--dash-accent)_85%,var(--dash-text-secondary))]">
-                Live feed
-              </p>
-              <p className="mt-1 text-sm font-medium text-[var(--dash-text-primary)]">
-                Body-cam (phone) · Session{' '}
-                <span className="font-data tabular-nums font-semibold">{telemetry.session.id}</span>
-              </p>
-            </div>
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#050505] text-[var(--dash-text-primary)]">
+      <header className="flex items-center justify-between border-b border-[var(--dash-border)] px-6 py-4">
+        <div>
+          <p className="text-xs uppercase tracking-[0.3em] text-[var(--dash-text-muted)]">
+            Dispatch Bridge
+          </p>
+          <h1 className="text-2xl font-semibold">Live Telemetry</h1>
+        </div>
+        <div className="flex items-center gap-4 text-sm">
+          <span className="text-[var(--dash-text-muted)]">
+            Connection:{' '}
             <span
               className={cn(
-                'inline-flex items-center gap-2 rounded-full border px-3 py-1 font-data text-[10px] font-semibold uppercase tracking-[0.14em]',
-                connectionTone,
+                'font-semibold',
+                connectionState === 'connected'
+                  ? 'text-[#00FF88]'
+                  : connectionState === 'connecting'
+                    ? 'text-[#FFB74D]'
+                    : 'text-[#FF1744]',
               )}
-              role="status"
-              aria-live="polite"
             >
-              <span className={cn('size-2 shrink-0 rounded-full', dotTone)} aria-hidden />
-              Telemetry · {connectionState}
+              {connectionLabel}
             </span>
-          </div>
-        </header>
-        <div className="flex min-h-0 flex-1 flex-col gap-4">
-          <div className="shrink-0">
+          </span>
+          <span className="text-[var(--dash-text-muted)]">
+            WS RTT:{' '}
+            <span className="font-semibold text-[var(--dash-text-primary)]">
+              {wsLatencyMs !== null ? `${wsLatencyMs} ms` : '—'}
+            </span>
+          </span>
+        </div>
+      </header>
+
+      <div className="grid flex-1 grid-cols-[minmax(0,1fr)_420px] gap-6 overflow-hidden px-6 pb-6">
+        <section className="flex min-h-0 flex-col gap-4 overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-[var(--dash-border)] bg-[var(--dash-surface)] shadow-[0_0_25px_rgba(0,255,136,0.08)]">
             <VideoPlayer
               streamUrl={telemetry.video.streamUrl}
               posterUrl={telemetry.video.posterUrl}
@@ -66,27 +68,34 @@ export function MainLayout() {
               wsLatencyMs={wsLatencyMs}
             />
           </div>
-          <CallerLocationMapPanel location={telemetry.caller_location} />
-        </div>
-      </div>
+          <div className="h-40 shrink-0 overflow-hidden rounded-2xl border border-[var(--dash-border)] bg-[var(--dash-surface)] p-3">
+            <CallerLocationMapPanel location={telemetry.caller_location} />
+          </div>
+        </section>
 
-      {/* Half screen: patient vitals + transcript */}
-      <div className="flex min-h-0 flex-col gap-4 lg:min-h-dvh">
-        <VitalsTelemetryCards
-          patient={telemetry.patient_heart}
-          respiratory={telemetry.respiratory}
-          cprGuidance={telemetry.cpr_guidance}
-          onCprGuidance={setCprGuidance}
-          wsConnected={connectionState === 'connected'}
-          telemetryCueRevision={Math.floor(Date.parse(telemetry.updatedAt) / 1000) || 0}
-        />
-        <TranscriptSummary
-          chunks={telemetry.transcript}
-          requestRollingSummary={requestRollingSummary}
-          subscribeRollingSummary={subscribeRollingSummary}
-          wsConnected={connectionState === 'connected'}
-        />
+        <aside className="flex min-h-0 flex-col gap-4 overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            <div className="flex flex-col gap-4">
+              <VitalsTelemetryCards
+                patient={telemetry.patient_heart}
+                respiratory={telemetry.respiratory}
+                cprGuidance={telemetry.cpr_guidance}
+                onCprGuidance={setCprGuidance}
+                wsConnected={connectionState === 'connected'}
+                telemetryCueRevision={Math.floor(Date.parse(telemetry.updatedAt) / 1000) || 0}
+              />
+              <SystemAlertsPanel alerts={telemetry.systemAlerts} />
+              <HazardList hazards={telemetry.hazards} />
+              <TranscriptSummary
+                chunks={telemetry.transcript}
+                requestRollingSummary={requestRollingSummary}
+                subscribeRollingSummary={subscribeRollingSummary}
+                wsConnected={connectionState === 'connected'}
+              />
+            </div>
+          </div>
+        </aside>
       </div>
-    </main>
+    </div>
   )
 }

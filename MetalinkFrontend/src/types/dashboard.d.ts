@@ -104,7 +104,10 @@ export interface DashboardTelemetryPayload {
   updatedAt: string
   session: SessionTelemetry
   respiratory: RespiratoryTelemetry
+  /** Scene / vision / dispatcher alerts — not the same as pipeline health (see `systemAlerts`). */
   hazards: HazardTelemetry[]
+  /** Service and pipeline status (e.g. ingest degraded); split from scene hazards in the UI. */
+  systemAlerts: HazardTelemetry[]
   transcript: TranscriptChunk[]
   transcript_ai_summary: TranscriptAISummaryTelemetry
   video: VideoTelemetry

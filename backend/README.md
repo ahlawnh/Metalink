@@ -44,6 +44,13 @@ Variables that matter for **fake data / Hacker 3 UI work**:
 
 For **live** mode later: set `MOCK_AI=false` and fill `LIVEKIT_*`, `OPENAI_API_KEY`, `DEEPGRAM_API_KEY` per `.env.example`.
 
+### Troubleshooting: OpenAI usage, vision, vitals
+
+- **No OpenAI usage on the dashboard** while “using the camera”: the **browser / phone** does not call OpenAI. Only the **FastAPI ingest** worker does, using `OPENAI_API_KEY` in the same environment **uvicorn** was started from. Confirm `MOCK_AI=false` in `backend/.env` and restart the server so live vision runs (watch startup logs for the live ingest path).
+- **`MOCK_AI=true`**: mock vision and transcript loops — **no** OpenAI billable calls.
+- **Vitals on the dispatcher UI**: the vision model is not meant to invent a numeric respiratory rate from a single frame; RR and related fields are merged from transcript and other paths in `app/services/telemetry_aggregate.py`. Heart rate may come from **rPPG / incident feed** when that pipeline is active.
+- **“Pipeline Degraded”**: emitted when ingest is unhealthy (e.g. loop errors before retry). On the operator dashboard this appears under **System status**, separate from **scene hazards**.
+
 ## Run the server
 
 ```bash
