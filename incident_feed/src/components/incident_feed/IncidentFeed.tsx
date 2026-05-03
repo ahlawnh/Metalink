@@ -74,7 +74,7 @@ function connectionBadgeState(room: Room) {
   }
 
   if (cs === ConnectionState.Connecting) {
-    return { tone: "yellow" as const, label: "Awaiting Dispatch" };
+    return { tone: "yellow" as const, label: "Awaiting D/spatch" };
   }
 
   if (cs === ConnectionState.Connected && qualityPoor) {
@@ -82,7 +82,7 @@ function connectionBadgeState(room: Room) {
   }
 
   if (cs === ConnectionState.Connected && remotes.length === 0) {
-    return { tone: "yellow" as const, label: "Awaiting Dispatch" };
+    return { tone: "yellow" as const, label: "Awaiting D/spatch" };
   }
 
   return { tone: "green" as const, label: "Connected" };
@@ -115,11 +115,11 @@ function FaceTimeOfferModal({
           id="facetime-offer-title"
           className="text-lg font-semibold text-white"
         >
-          Dispatcher requests video
+          D/spatch requests video
         </p>
         <p className="mt-3 text-[15px] leading-relaxed text-white/70">
-          Dispatch would like to connect with video (similar to FaceTime) so they
-          can see what&apos;s happening. You can stay on audio only if you prefer.
+          D/spatch requested video to better assess the scene.
+          You can stay on audio only.
         </p>
         <div className="mt-6 flex flex-col gap-3">
           <button

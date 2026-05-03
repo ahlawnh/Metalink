@@ -1,7 +1,7 @@
 {
-  "name": "Incident feed broadcaster",
-  "short_name": "Incident feed",
-  "description": "Stream incident camera to dispatch",
+  "name": "D/spatch Caller Link",
+  "short_name": "D/spatch",
+  "description": "Secure caller audio and video link",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f6f5f2",
