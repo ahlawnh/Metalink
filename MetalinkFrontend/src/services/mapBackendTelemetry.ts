@@ -275,8 +275,8 @@ export function applyTelemetryUpdate(
       hc.active &&
       typeof hc.bpm === 'number' &&
       Number.isFinite(hc.bpm) &&
-      hc.bpm >= 100 &&
-      hc.bpm <= 120
+      hc.bpm >= 60 &&
+      hc.bpm <= 140
     ) {
       cpr_guidance = { active: true, bpm: Math.round(hc.bpm) }
     } else {

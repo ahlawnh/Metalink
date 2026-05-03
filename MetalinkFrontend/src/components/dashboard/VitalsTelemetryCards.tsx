@@ -160,7 +160,7 @@ function CprTempoControl({
             onClick={() => setOpen(false)}
           />
           <div className="absolute right-0 top-full z-[90] mt-1 w-[min(100vw-2rem,17rem)] rounded-lg border border-white/[0.08] bg-[var(--dash-surface-raised)] p-3 shadow-xl ring-1 ring-black/40">
-            <p className="dash-label pb-2 normal-case">Compression tempo (100–120 BPM)</p>
+            <p className="dash-label pb-2 normal-case">Compression tempo (60–140 BPM)</p>
             <label className="flex flex-col gap-1">
               <span className="font-data text-xl font-bold tabular-nums text-[var(--dash-text-primary)]">
                 {targetBpm}{' '}
@@ -168,8 +168,8 @@ function CprTempoControl({
               </span>
               <input
                 type="range"
-                min={100}
-                max={120}
+                min={60}
+                max={140}
                 step={1}
                 value={targetBpm}
                 onChange={(e) => setTargetBpm(Number(e.target.value))}
@@ -177,8 +177,8 @@ function CprTempoControl({
                 className="w-full accent-[var(--dash-accent)] disabled:opacity-50"
               />
               <span className="flex justify-between font-data text-[10px] text-[var(--dash-text-secondary)]">
-                <span>100</span>
-                <span>120</span>
+                <span>60</span>
+                <span>140</span>
               </span>
             </label>
             <div className="mt-3 flex flex-wrap gap-2">
