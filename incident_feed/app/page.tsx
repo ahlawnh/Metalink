@@ -55,6 +55,12 @@ export default function IncidentFeedPage() {
           ? crypto.randomUUID()
           : `session-${Date.now()}`;
 
+      void fetch("/api/incident/session/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId }),
+      }).catch(() => {});
+
       setCallStartedAt(Date.now());
       setSession({
         token: data.token,

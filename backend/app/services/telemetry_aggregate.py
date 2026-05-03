@@ -34,6 +34,8 @@ class TelemetryState:
     transcript_buffer: str = ""
     transcript_segments: list[dict[str, Any]] = field(default_factory=list)
     last_breathe_timestamps_s: list[float] = field(default_factory=list)
+    # Set True when bystander ends call — stops append_transcript_segment until session/start.
+    transcript_ingest_paused: bool = False
 
 
 def record_transcript_side_effects(state: TelemetryState, *, text: str, is_final: bool) -> None:
@@ -119,6 +121,8 @@ def append_transcript_segment(
     is_final: bool = True,
     confidence: float = 0.0,
 ) -> None:
+    if state.transcript_ingest_paused:
+        return
     trimmed = text.strip()
     if not trimmed:
         return
@@ -138,6 +142,19 @@ def append_transcript_segment(
     state.transcript_buffer = " ".join(
         f"{segment['speaker'].title()}: {segment['text']}" for segment in state.transcript_segments
     )
+
+
+def clear_transcript_ingest_state(state: TelemetryState) -> None:
+    """Wipe in-memory STT transcript when the bystander session ends (room disconnect)."""
+    state.transcript_segments.clear()
+    state.transcript_buffer = ""
+    state.last_breathe_timestamps_s.clear()
+    state.transcript_ingest_paused = True
+
+
+def resume_transcript_ingest(state: TelemetryState) -> None:
+    """Allow Deepgram / mock transcript to append again when a new bystander session starts."""
+    state.transcript_ingest_paused = False
 
 
 def build_telemetry_payload(

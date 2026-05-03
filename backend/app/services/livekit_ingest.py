@@ -312,6 +312,8 @@ async def _mock_vision_loop(*, state: TelemetryState, interval_s: float) -> None
 
 async def _mock_transcript_loop(*, state: TelemetryState) -> None:
     async for chunk in mock_transcript_stream():
+        if state.transcript_ingest_paused:
+            continue
         append_transcript_segment(
             state,
             speaker="caller",
@@ -457,6 +459,8 @@ async def _transcript_loop_from_livekit_track(
             await astream.aclose()
 
     async for tchunk in deepgram_stream_from_pcm16(pcm16_mono_16khz=pcm_iter()):
+        if state.transcript_ingest_paused:
+            continue
         if not isinstance(tchunk, TranscriptChunk):
             continue
         if tchunk.text:

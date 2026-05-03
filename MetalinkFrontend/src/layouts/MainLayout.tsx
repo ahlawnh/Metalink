@@ -1,5 +1,6 @@
 import CallerLocationMapPanel from '@/components/dashboard/CallerLocationMapPanel'
 import PatientHeartMonitor from '@/components/dashboard/PatientHeartMonitor'
+import TelemetryPanel from '@/components/dashboard/TelemetryPanel'
 import TranscriptSummary from '@/components/dashboard/TranscriptSummary'
 import VideoPlayer from '@/components/dashboard/VideoPlayer'
 import { useTelemetryStream } from '@/hooks/useTelemetryStream'
@@ -73,9 +74,10 @@ export function MainLayout() {
         </div>
       </div>
 
-      {/* Half screen: patient cardiac + transcript */}
+      {/* Half screen: patient vitals + transcript */}
       <div className="flex min-h-0 flex-col gap-4 lg:min-h-dvh">
         <PatientHeartMonitor patient={telemetry.patient_heart} />
+        <TelemetryPanel telemetry={telemetry.respiratory} />
         <TranscriptSummary
           chunks={telemetry.transcript}
           requestRollingSummary={requestRollingSummary}
