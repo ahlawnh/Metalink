@@ -90,14 +90,14 @@ async def analyze_frame_with_gpt54(
 
     This stays self-contained in app/services for Hacker 2. It intentionally does not
     depend on Hacker 4 schemas; Hacker 4 can validate at the broadcaster boundary.
+
+    Mock vision is **only** when `mock_ai=True` (caller's intent). Live LiveKit ingest
+    passes `mock_ai=False` so this does not double-gate on `MOCK_AI` env and ignore
+    `run_ingestion_loop(mock_ai=False)`.
     """
 
-    if mock_ai or os.getenv("MOCK_AI", "true").lower() in {"1", "true", "yes", "on"}:
-        logger.debug(
-            "vision: skipping OpenAI (mock): mock_ai=%s MOCK_AI=%r",
-            mock_ai,
-            os.getenv("MOCK_AI"),
-        )
+    if mock_ai:
+        logger.debug("vision: skipping OpenAI (mock): mock_ai=True")
         return _mock_vision(seed=seed)
 
     # Optional dependency: do not hard-require OpenAI SDK during early mock phase.

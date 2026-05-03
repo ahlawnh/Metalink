@@ -426,7 +426,11 @@ async def _vision_loop_from_livekit_track(
             print(pre, flush=True)
 
             try:
-                vr: VisionResult = await analyze_frame_with_gpt54(frame_b64_jpeg=frame_b64, model=openai_model)
+                vr: VisionResult = await analyze_frame_with_gpt54(
+                    frame_b64_jpeg=frame_b64,
+                    model=openai_model,
+                    mock_ai=False,
+                )
             except Exception as vision_exc:
                 logger.exception("[ingest-debug] analyze_frame_with_gpt54 FAILED tick=%s", frame_tick)
                 print(f"[ingest-debug] analyze_frame_with_gpt54 FAILED tick={frame_tick}: {vision_exc!r}", flush=True)
