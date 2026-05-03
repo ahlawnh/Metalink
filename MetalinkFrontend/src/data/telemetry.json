@@ -37,5 +37,10 @@
     "dispatcher_notice": "Awaiting heart rate from incident feed rPPG or live telemetry.",
     "signal_source": "unknown",
     "history_bpm": []
+  },
+  "haptic_cue": {
+    "active": false,
+    "pattern": "none",
+    "bpm": null
   }
 }

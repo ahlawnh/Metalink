@@ -12,6 +12,7 @@ from app.core.websocket_manager import telemetry_manager
 from app.schemas.telemetry import (
     ClientPongPayload,
     EventType,
+    HapticCue,
     Heartbeat,
     PipelineStatus,
     PipelineStatusUpdate,
@@ -177,6 +178,27 @@ async def telemetry_websocket(websocket: WebSocket, scenario: Optional[str] = No
                         payload=TelemetryUpdate(
                             pipeline_status=PipelineStatus.LIVE,
                             caller_location=snap,
+                        ),
+                    ),
+                )
+            elif isinstance(data, dict) and data.get("event_type") == "request.dispatch_cpr":
+                # Fan-out CPR metronome cue to every telemetry client (dashboard + incident_feed PWA).
+                active = bool(data.get("active", True))
+                if active:
+                    try:
+                        bpm = int(data.get("bpm", 110))
+                    except (TypeError, ValueError):
+                        bpm = 110
+                    bpm = max(60, min(140, bpm))
+                    cue = HapticCue(active=True, pattern="cpr_metronome", bpm=bpm)
+                else:
+                    cue = HapticCue(active=False, pattern="none", bpm=None)
+                await telemetry_manager.broadcast(
+                    WebSocketEvent(
+                        event_type=EventType.TELEMETRY_UPDATE,
+                        payload=TelemetryUpdate(
+                            pipeline_status=PipelineStatus.LIVE,
+                            haptic_cue=cue,
                         ),
                     ),
                 )
