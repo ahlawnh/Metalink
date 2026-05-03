@@ -50,6 +50,7 @@ export interface BackendHeartRateRppg {
   disclaimer?: string
 }
 
+/** Caller-device CPR tempo cue; consumed by the bystander PWA for haptics / synced prompts. */
 export interface BackendHapticCue {
   active: boolean
   pattern: 'none' | 'cpr_metronome'

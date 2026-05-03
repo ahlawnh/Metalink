@@ -57,10 +57,8 @@ export function useTelemetryStream(): {
   subscribeRollingSummary: (fn: (text: string) => void) => () => void
   /** Ask backend for a fresh caller GPS fix — replies with `telemetry.update` including `caller_location` when supported. */
   requestCallerLocationRefresh: () => void
-  /** Broadcast CPR metronome cue to all telemetry clients (bystander PWA vibrates at `bpm`). */
-  sendDispatchCpr: (bpm: number) => void
-  /** Stop CPR metronome cue on all clients. */
-  sendStopDispatchCpr: () => void
+  /** Broadcast CPR compression tempo (60–140 BPM) to all telemetry subscribers via `dispatcher.cpr_guidance` / caller PWA. */
+  setCprGuidance: (active: boolean, bpm: number | null) => void
 } {
   const initial = useMemo(() => normalizeTelemetryPayload(fallbackTelemetry), [])
   const [telemetry, setTelemetry] = useState<DashboardTelemetryPayload>(initial)
@@ -85,17 +83,16 @@ export function useTelemetryStream(): {
     socket.send(JSON.stringify({ event_type: 'request.caller_location' }))
   }, [])
 
-  const sendDispatchCpr = useCallback((bpm: number) => {
+  const setCprGuidance = useCallback((active: boolean, bpm: number | null) => {
     const socket = socketRef.current
     if (!socket || socket.readyState !== WebSocket.OPEN) return
-    const clamped = Math.min(140, Math.max(60, Math.round(Number(bpm) || 110)))
-    socket.send(JSON.stringify({ event_type: 'request.dispatch_cpr', active: true, bpm: clamped }))
-  }, [])
-
-  const sendStopDispatchCpr = useCallback(() => {
-    const socket = socketRef.current
-    if (!socket || socket.readyState !== WebSocket.OPEN) return
-    socket.send(JSON.stringify({ event_type: 'request.dispatch_cpr', active: false }))
+    socket.send(
+      JSON.stringify({
+        event_type: 'dispatcher.cpr_guidance',
+        active,
+        bpm: active && typeof bpm === 'number' ? bpm : null,
+      }),
+    )
   }, [])
 
   const subscribeRollingSummary = useCallback((fn: (text: string) => void) => {
@@ -276,7 +273,6 @@ export function useTelemetryStream(): {
     requestRollingSummary,
     subscribeRollingSummary,
     requestCallerLocationRefresh,
-    sendDispatchCpr,
-    sendStopDispatchCpr,
+    setCprGuidance,
   }
 }

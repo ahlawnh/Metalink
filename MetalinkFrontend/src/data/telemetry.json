@@ -39,6 +39,10 @@
     "signal_source": "unknown",
     "history_bpm": []
   },
+  "cpr_guidance": {
+    "active": false,
+    "bpm": null
+  },
   "haptic_cue": {
     "active": false,
     "pattern": "none",

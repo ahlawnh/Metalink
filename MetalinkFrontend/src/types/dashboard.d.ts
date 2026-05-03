@@ -86,7 +86,13 @@ export interface CallerLocationTelemetry {
   updated_at?: string
 }
 
-/** Dispatcher-issued cue for bystander PWA (CPR compression cadence via vibration). */
+/** Dispatcher-driven CPR tempo from vitals “CPR tempo” (60–140 BPM); echoed via WS `haptic_cue`. */
+export interface CprGuidanceTelemetry {
+  active: boolean
+  bpm: number | null
+}
+
+/** Dispatcher-issued cue for bystander PWA (CPR cadence; caller plays low-frequency buzz audio). */
 export interface HapticCueTelemetry {
   active: boolean
   pattern: 'none' | 'cpr_metronome'
@@ -108,5 +114,8 @@ export interface DashboardTelemetryPayload {
   operator: OperatorTelemetry
   caller_location: CallerLocationTelemetry
   patient_heart: PatientHeartTelemetry
+  /** Vitals HR panel CPR tempo UI state (mirrors backend `haptic_cue` when active). */
+  cpr_guidance: CprGuidanceTelemetry
+  /** Backend `haptic_cue` for dashboard parity (60–140 BPM when active). */
   haptic_cue: HapticCueTelemetry
 }

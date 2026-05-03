@@ -1,8 +1,8 @@
 import type {
   BackendCriticalAlert,
+  BackendDetectedItem,
   BackendHapticCue,
   BackendTelemetryUpdatePayload,
-  BackendDetectedItem,
   BackendTranscriptSegment,
 } from '@/types/ws'
 import type {
@@ -139,7 +139,14 @@ function mergeHapticCue(
     return previous
   }
   const hc = envelope.haptic_cue as BackendHapticCue | null | undefined
-  if (hc && typeof hc === 'object' && hc.active === true && hc.pattern === 'cpr_metronome') {
+  // Routine ingest emits explicit null — keep dispatcher CPR state until an object clears it.
+  if (hc === null || hc === undefined) {
+    return previous
+  }
+  if (typeof hc !== 'object') {
+    return previous
+  }
+  if (hc.active === true && hc.pattern === 'cpr_metronome') {
     const rawBpm = hc.bpm
     const bpm =
       typeof rawBpm === 'number' && Number.isFinite(rawBpm)
@@ -269,12 +276,32 @@ export function applyTelemetryUpdate(
         }
       : previous.patient_heart
 
+  const haptic_cue = mergeHapticCue(previous.haptic_cue, rawPayload)
+
+  let cpr_guidance = previous.cpr_guidance
+  if (payload.haptic_cue !== undefined && payload.haptic_cue !== null) {
+    const hc = payload.haptic_cue as BackendHapticCue
+    if (
+      hc.pattern === 'cpr_metronome' &&
+      hc.active &&
+      typeof hc.bpm === 'number' &&
+      Number.isFinite(hc.bpm) &&
+      hc.bpm >= 60 &&
+      hc.bpm <= 140
+    ) {
+      cpr_guidance = { active: true, bpm: Math.round(hc.bpm) }
+    } else {
+      cpr_guidance = { active: false, bpm: null }
+    }
+  }
+
   return {
     ...previous,
     updatedAt: now,
     caller_location,
     patient_heart,
-    haptic_cue: mergeHapticCue(previous.haptic_cue, rawPayload),
+    cpr_guidance,
+    haptic_cue,
     transcript_ai_summary: payload.clear_transcript
       ? { status: 'idle', text: null, updated_at: now }
       : previous.transcript_ai_summary,
