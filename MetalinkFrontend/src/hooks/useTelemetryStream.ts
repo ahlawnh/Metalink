@@ -105,6 +105,8 @@ export function useTelemetryStream(): {
 
       socket.onopen = () => {
         if (cancelled) return
+        // Fresh slate for each connection: empty transcript, vitals placeholders (no mock carryover).
+        setTelemetry(initial)
         setConnectionState('connected')
       }
 

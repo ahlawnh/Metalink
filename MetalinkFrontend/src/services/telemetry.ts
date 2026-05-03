@@ -35,7 +35,7 @@ function normalizePatientHeart(data: Partial<DashboardTelemetryPayload>): Patien
     raw?.signal_source === 'rppg' || raw?.signal_source === 'mock' || raw?.signal_source === 'unknown'
       ? raw.signal_source
       : 'unknown'
-  const historySafe = history.length > 0 ? history : Number.isFinite(bpm) ? [bpm] : [0]
+  const historySafe = history.length > 0 ? history : Number.isFinite(bpm) && bpm > 0 ? [bpm] : []
 
   return {
     heart_rate_bpm: Number.isFinite(bpm) ? bpm : 0,

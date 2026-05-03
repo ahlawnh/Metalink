@@ -148,6 +148,8 @@ class TelemetryUpdate(BaseModel):
     agonal_breathing: Optional[AgonalBreathingSignal] = None
     haptic_cue: Optional[HapticCue] = None
     caller_location: Optional[CallerLocationSnapshot] = None
+    # When true, dispatch UI clears call transcript and AI summary (bystander ended session).
+    clear_transcript: bool = False
 
 
 class PipelineStatusUpdate(BaseModel):

@@ -91,14 +91,12 @@ function EmergencyCallSurface({
   roomName,
   livekitIdentity,
   initialLocation,
-  onSessionEnd,
 }: {
   callStartedAt: number;
   sessionId: string;
   roomName: string;
   livekitIdentity: string;
   initialLocation: IncidentLocationSnapshot | null;
-  onSessionEnd: () => void;
 }) {
   const room = useRoomContext();
   const timer = useCallTimer(callStartedAt);
@@ -296,6 +294,19 @@ export function IncidentFeed({
   initialLocation,
   onSessionEnd,
 }: IncidentFeedProps) {
+  const notifySessionEnd = useCallback(async () => {
+    try {
+      await fetch("/api/incident/session/end", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId }),
+      });
+    } catch {
+      /* dispatch clear is best-effort */
+    }
+    onSessionEnd();
+  }, [onSessionEnd, sessionId]);
+
   return (
     <div className="h-[100dvh] w-screen overflow-hidden bg-black transition-all duration-700 ease-in-out">
       <LiveKitRoom
@@ -305,7 +316,7 @@ export function IncidentFeed({
         audio
         video={{ facingMode: "environment" }}
         screen={false}
-        onDisconnected={() => onSessionEnd()}
+        onDisconnected={() => void notifySessionEnd()}
       >
         <EmergencyCallSurface
           callStartedAt={callStartedAt}
@@ -313,7 +324,6 @@ export function IncidentFeed({
           roomName={roomName}
           livekitIdentity={livekitIdentity}
           initialLocation={initialLocation}
-          onSessionEnd={onSessionEnd}
         />
       </LiveKitRoom>
     </div>

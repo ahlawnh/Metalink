@@ -111,17 +111,38 @@ export function applyTelemetryUpdate(
   for (const h of [...fromAlerts, ...scene, ...subs]) {
     hazardById.set(h.id, h)
   }
-  const hazards = [...hazardById.values()]
 
-  const rate = payload.resp_rate_estimate?.value ?? 0
+  /** incident_feed batches are LIVE with empty hazard lists — keep existing hazards from vision/mock. */
+  const isIncidentPatch =
+    payload.pipeline_status === 'live' &&
+    (payload.scene_hazards?.length ?? 0) === 0 &&
+    (payload.substances?.length ?? 0) === 0 &&
+    (payload.critical_alerts?.length ?? 0) === 0
+
+  const hazards = isIncidentPatch ? previous.hazards : [...hazardById.values()]
+
+  const rawRate = payload.resp_rate_estimate?.value
+  const keepResp =
+    isIncidentPatch &&
+    (rawRate === null || rawRate === undefined || Number(rawRate) === 0)
+  const mergedRate = keepResp
+    ? previous.respiratory.estimated_respiratory_rate
+    : typeof rawRate === 'number' && !Number.isNaN(rawRate)
+      ? rawRate
+      : 0
+
   const pipelineStatus = payload.pipeline_status ?? 'mock'
+  const baseResp = payload.resp_rate_estimate ?? { value: null, method: 'unknown', confidence: 0 }
   const fullPayload: BackendTelemetryUpdatePayload = {
     timestamp: payload.timestamp,
     scene_hazards: payload.scene_hazards ?? [],
     substances: payload.substances ?? [],
     patient_position: payload.patient_position ?? 'unknown',
     cyanosis_flag: payload.cyanosis_flag ?? { detected: false, confidence: 0 },
-    resp_rate_estimate: payload.resp_rate_estimate ?? { value: null, method: 'unknown', confidence: 0 },
+    resp_rate_estimate: {
+      ...baseResp,
+      value: mergedRate > 0 ? mergedRate : null,
+    },
     consciousness_level: payload.consciousness_level ?? 'unknown',
     transcript_snippet: payload.transcript_snippet ?? '',
     transcript_segments: payload.transcript_segments,
@@ -134,8 +155,9 @@ export function applyTelemetryUpdate(
     ? segmentsToTranscript(payload.transcript_segments)
     : []
   const snippetChunks = snippetToTranscript(fullPayload.transcript_snippet, now)
-  const transcript =
-    segmentChunks.length > 0
+  const transcript = payload.clear_transcript
+    ? []
+    : segmentChunks.length > 0
       ? segmentChunks
       : snippetChunks.length > 0
         ? snippetChunks
@@ -153,14 +175,35 @@ export function applyTelemetryUpdate(
         }
       : previous.caller_location
 
+  const hr = payload.heart_rate_rppg?.value
+  const patient_heart =
+    typeof hr === 'number' && Number.isFinite(hr) && hr > 0
+      ? {
+          ...previous.patient_heart,
+          heart_rate_bpm: hr,
+          signal_source: 'rppg' as const,
+          history_bpm: [...previous.patient_heart.history_bpm.slice(-19), hr],
+          dispatcher_notice:
+            hr >= 110
+              ? 'Elevated heart rate (camera-derived estimate; not a medical device).'
+              : previous.patient_heart.dispatcher_notice,
+        }
+      : previous.patient_heart
+
   return {
     ...previous,
     updatedAt: now,
     caller_location,
+    patient_heart,
+    transcript_ai_summary: payload.clear_transcript
+      ? { status: 'idle', text: null, updated_at: now }
+      : previous.transcript_ai_summary,
     respiratory: {
-      estimated_respiratory_rate: typeof rate === 'number' && !Number.isNaN(rate) ? rate : 0,
+      estimated_respiratory_rate: mergedRate,
       respiratory_status: respiratoryStatus,
-      confidence: Number(payload.resp_rate_estimate?.confidence ?? 0),
+      confidence: keepResp
+        ? previous.respiratory.confidence
+        : Number(payload.resp_rate_estimate?.confidence ?? 0),
       source: pipelineStatus === 'live' ? 'ai' : 'mock',
     },
     hazards,
