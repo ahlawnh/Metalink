@@ -16,6 +16,8 @@ from app.services.telemetry_aggregate import (
 from app.services.transcription import TranscriptChunk, deepgram_stream_from_pcm16, mock_transcript_stream
 from app.services.vision import VisionResult, analyze_frame_with_gpt54
 
+_DG_SAMPLE_RATE = 16000
+
 
 @dataclass(frozen=True)
 class LiveKitConfig:
@@ -128,13 +130,13 @@ async def run_ingestion_loop(
     video_tracks: list[Any] = []
     audio_track: Optional[Any] = None
 
-    async def on_track_subscribed(track: Any, *_: Any) -> None:
+    def on_track_subscribed(track: Any, *_: Any) -> None:
         nonlocal audio_track
         kind = getattr(track, "kind", None)
-        k = str(kind).lower()
-        if "video" in k:
+        # TrackKind stringifies to "1"/"2", not "audio"/"video".
+        if kind == rtc.TrackKind.KIND_VIDEO:
             video_tracks.append(track)
-        elif "audio" in k and audio_track is None:
+        elif kind == rtc.TrackKind.KIND_AUDIO and audio_track is None:
             audio_track = track
 
     room.on("track_subscribed", on_track_subscribed)
@@ -208,62 +210,92 @@ async def _vision_loop_from_livekit_track(
     frame_max_width: int,
 ) -> None:
     """
-    Best-effort: grab frames from LiveKit video track.
-    Exact APIs vary by SDK version; keep contained here.
+    Best-effort: grab frames from LiveKit video track (livekit.rtc.VideoStream).
     """
 
-    # Attempt to create a video stream/reader
-    try:
-        stream = video_track.create_stream()  # type: ignore[attr-defined]
-    except Exception as e:  # pragma: no cover
-        raise RuntimeError("LiveKit video_track lacks create_stream(); update SDK integration here.") from e
+    from io import BytesIO
 
+    from livekit import rtc  # type: ignore
+
+    stream = rtc.VideoStream(video_track)
     last = 0.0
-    async for frame in stream:
-        now = time.time()
-        if now - last < interval_s:
-            continue
-        last = now
+    try:
+        async for event in stream:
+            now = time.time()
+            if now - last < interval_s:
+                continue
+            last = now
 
-        # Frame -> JPEG bytes (SDK-dependent)
-        jpeg_bytes: Optional[bytes] = None
-        if hasattr(frame, "to_jpeg"):
-            jpeg_bytes = await frame.to_jpeg()  # type: ignore[misc]
-        elif hasattr(frame, "jpeg"):
-            jpeg_bytes = frame.jpeg  # type: ignore[attr-defined]
+            vf = event.frame
+            try:
+                rgb = vf.convert(rtc.VideoBufferType.RGB24)
+            except Exception:
+                continue
 
-        if not jpeg_bytes:
-            continue
+            try:
+                from PIL import Image  # type: ignore
 
-        jpeg_bytes = await _downscale_jpeg_to_max_width(jpeg_bytes, max_width=frame_max_width)
-        frame_b64 = base64.b64encode(jpeg_bytes).decode("ascii")
+                im = Image.frombytes("RGB", (rgb.width, rgb.height), bytes(rgb.data))
+                buf = BytesIO()
+                im.save(buf, format="JPEG", quality=85, optimize=True)
+                jpeg_bytes = buf.getvalue()
+            except Exception:
+                continue
 
-        vr: VisionResult = await analyze_frame_with_gpt54(frame_b64_jpeg=frame_b64, model=openai_model)
-        state.latest_vision = _vision_to_state_dict(vr)
-        await publish_telemetry(state)
+            jpeg_bytes = await _downscale_jpeg_to_max_width(jpeg_bytes, max_width=frame_max_width)
+            frame_b64 = base64.b64encode(jpeg_bytes).decode("ascii")
+
+            vr: VisionResult = await analyze_frame_with_gpt54(frame_b64_jpeg=frame_b64, model=openai_model)
+            state.latest_vision = _vision_to_state_dict(vr)
+            await publish_telemetry(state)
+    finally:
+        await stream.aclose()
 
 
 async def _transcript_loop_from_livekit_track(*, state: TelemetryState, audio_track: Any) -> None:
     """
     Convert LiveKit audio into 16kHz mono PCM16 bytes for Deepgram.
 
-    Audio decoding/resampling is SDK-specific; implement the simplest possible path and
-    keep a clear upgrade point.
+    Uses AudioStream (native 16 kHz mono where supported) + AudioResampler fallback.
     """
 
-    async def pcm_iter() -> Any:
-        # Attempt to create an audio stream that yields PCM16 already.
-        try:
-            stream = audio_track.create_stream()  # type: ignore[attr-defined]
-        except Exception as e:  # pragma: no cover
-            raise RuntimeError("LiveKit audio_track lacks create_stream(); update SDK integration here.") from e
+    import numpy as np
+    from livekit import rtc  # type: ignore
 
-        async for chunk in stream:
-            # Best-effort: if chunk is bytes assume it's linear16 already.
-            if isinstance(chunk, (bytes, bytearray)):
-                yield bytes(chunk)
-            elif hasattr(chunk, "data"):
-                yield bytes(chunk.data)  # type: ignore[attr-defined]
+    async def pcm_iter() -> Any:
+        # Ask native stream for Deepgram-friendly rate; frames are s16le PCM.
+        astream = rtc.AudioStream.from_track(
+            track=audio_track,
+            sample_rate=_DG_SAMPLE_RATE,
+            num_channels=1,
+        )
+        resampler: Any = None
+        resampler_key: tuple[int, int] | None = None
+        try:
+            async for ev in astream:
+                fr = ev.frame
+                arr = np.asarray(fr.data, dtype=np.int16).ravel()
+                nch = int(fr.num_channels)
+                if nch > 1:
+                    arr = arr.reshape(-1, nch).mean(axis=1).astype(np.int16)
+                pcm = arr.tobytes()
+                sr = int(fr.sample_rate)
+
+                if sr == _DG_SAMPLE_RATE:
+                    yield pcm
+                    continue
+
+                key = (sr, 1)
+                if resampler is None or resampler_key != key:
+                    resampler = rtc.AudioResampler(sr, _DG_SAMPLE_RATE, num_channels=1)
+                    resampler_key = key
+                for out_fr in resampler.push(bytearray(pcm)):
+                    yield np.asarray(out_fr.data, dtype=np.int16).tobytes()
+            if resampler is not None:
+                for out_fr in resampler.flush():
+                    yield np.asarray(out_fr.data, dtype=np.int16).tobytes()
+        finally:
+            await astream.aclose()
 
     buffer_parts: list[str] = []
 
