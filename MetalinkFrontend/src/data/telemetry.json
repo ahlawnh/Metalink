@@ -9,9 +9,10 @@
   "updatedAt": "2026-05-02T12:00:00.000Z",
   "respiratory": {
     "estimated_respiratory_rate": 0,
-    "respiratory_status": "watch",
+    "respiratory_status": "normal",
     "confidence": 0,
-    "source": "mock"
+    "source": "mock",
+    "history_rr": []
   },
   "hazards": [],
   "transcript": [],
@@ -28,12 +29,12 @@
     "heart_rate_bpm": 72
   },
   "caller_location": {
-    "label": "Waiting for caller GPS"
+    "label": "Awaiting caller GPS (incident feed or telemetry)"
   },
   "patient_heart": {
     "heart_rate_bpm": 0,
     "mode": "stable",
-    "dispatcher_notice": "Live HR appears when incident_feed sends camera vitals over telemetry.",
+    "dispatcher_notice": "Awaiting heart rate from incident feed rPPG or live telemetry.",
     "signal_source": "unknown",
     "history_bpm": []
   }

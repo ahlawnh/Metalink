@@ -3,12 +3,13 @@ import {
   Room,
   RoomEvent,
   Track,
+  type LocalParticipant,
   type RemoteAudioTrack,
   type RemoteParticipant,
   type RemoteVideoTrack,
 } from 'livekit-client'
 import type { RefObject } from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { resolveLiveKitSession } from '@/services/livekitSession'
 
 function envTrim(key: string): string {
@@ -16,23 +17,40 @@ function envTrim(key: string): string {
   return typeof raw === 'string' ? raw.trim() : ''
 }
 
+/** Signal transport exposes ping RTT (ms) once connected. */
+function readSignalRttMs(room: Room | null): number | null {
+  if (!room || room.state !== ConnectionState.Connected) return null
+  try {
+    const engine = room.engine as { client?: { rtt?: number } }
+    const ms = engine.client?.rtt
+    if (typeof ms === 'number' && ms > 0 && ms < 60000) {
+      return Math.round(ms)
+    }
+  } catch {
+    /* ignore */
+  }
+  return null
+}
+
 export interface LiveKitCallerBinding {
   connectionState: ConnectionState
   hasRemoteVideo: boolean
   hasRemoteAudio: boolean
-  /** Caller muted their microphone at the source (remote publication). */
   remoteMicMuted: boolean
   /** Dispatcher mic publication state (operator -> caller). */
   isLocalMicLive: boolean
   localMicError: string | null
   error: string | null
-  /** True while resolving URL/token (including HTTP fetch). */
   isSessionLoading: boolean
+  /** LiveKit signalling RTT when available (preferred for Live feed latency chip). */
+  signalRttMs: number | null
+  /** Operator outgoing mic published (two-way audio). */
+  operatorMicEnabled: boolean
+  operatorMicBlocked: boolean
+  toggleOperatorMic: () => Promise<void>
 }
 
-/**
- * LiveKit operator session: subscribes to caller camera/mic and publishes dispatcher mic.
- */
+/** Operator LiveKit session: caller camera/mic in, dispatcher mic out (camera stays off). */
 export function useLiveKitCallerVideo(
   enabled: boolean,
   videoRef: RefObject<HTMLVideoElement | null>,
@@ -46,10 +64,18 @@ export function useLiveKitCallerVideo(
   const [localMicError, setLocalMicError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isSessionLoading, setIsSessionLoading] = useState(enabled)
+  const [signalRttMs, setSignalRttMs] = useState<number | null>(null)
+  const [operatorMicEnabled, setOperatorMicEnabled] = useState(false)
+  const [operatorMicBlocked, setOperatorMicBlocked] = useState(false)
 
   const attachedVideoRef = useRef<RemoteVideoTrack | null>(null)
   const attachedAudioRef = useRef<RemoteAudioTrack | null>(null)
   const roomRef = useRef<Room | null>(null)
+
+  const syncLocalMicState = useCallback((lp: LocalParticipant) => {
+    setOperatorMicEnabled(lp.isMicrophoneEnabled)
+    setIsLocalMicLive(lp.isMicrophoneEnabled)
+  }, [])
 
   useEffect(() => {
     if (!enabled) {
@@ -57,7 +83,6 @@ export function useLiveKitCallerVideo(
     }
 
     const callerIdentity = envTrim('VITE_LIVEKIT_CALLER_PARTICIPANT_IDENTITY') || 'caller'
-    /** Legacy filter for a second dashboard tab / agent named `dispatcher` (not the local participant). */
     const legacyOperatorAlias = envTrim('VITE_LIVEKIT_OPERATOR_PARTICIPANT_IDENTITY') || 'dispatcher'
     const backendIngestIdentity = envTrim('VITE_LIVEKIT_BACKEND_PARTICIPANT_IDENTITY') || 'aegis-link-backend'
 
@@ -137,6 +162,7 @@ export function useLiveKitCallerVideo(
       setIsSessionLoading(true)
       setError(null)
       setLocalMicError(null)
+      setOperatorMicBlocked(false)
       let session: Awaited<ReturnType<typeof resolveLiveKitSession>>
       try {
         session = await resolveLiveKitSession()
@@ -165,6 +191,8 @@ export function useLiveKitCallerVideo(
       room.on(RoomEvent.TrackUnsubscribed, resync)
       room.on(RoomEvent.TrackMuted, resync)
       room.on(RoomEvent.TrackUnmuted, resync)
+      room.on(RoomEvent.LocalTrackPublished, () => syncLocalMicState(room.localParticipant))
+      room.on(RoomEvent.LocalTrackUnpublished, () => syncLocalMicState(room.localParticipant))
 
       try {
         await room.connect(session.url, session.token, { autoSubscribe: true })
@@ -176,13 +204,17 @@ export function useLiveKitCallerVideo(
           roomRef.current = null
           return
         }
+
         await room.localParticipant.setCameraEnabled(false)
         try {
           await room.localParticipant.setMicrophoneEnabled(true)
           setIsLocalMicLive(true)
           setLocalMicError(null)
+          setOperatorMicBlocked(false)
+          syncLocalMicState(room.localParticipant)
         } catch (e) {
           setIsLocalMicLive(false)
+          setOperatorMicBlocked(true)
           setLocalMicError(e instanceof Error ? e.message : 'Microphone permission denied or unavailable')
         }
         setConnectionState(room.state)
@@ -219,9 +251,39 @@ export function useLiveKitCallerVideo(
       setIsLocalMicLive(false)
       setLocalMicError(null)
       setIsSessionLoading(false)
+      setSignalRttMs(null)
+      setOperatorMicEnabled(false)
+      setOperatorMicBlocked(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- stable RefObjects from parent
-  }, [enabled])
+  }, [enabled, syncLocalMicState])
+
+  useEffect(() => {
+    if (!enabled || !roomRef.current) return
+    const room = roomRef.current
+    const tick = () => {
+      setSignalRttMs(readSignalRttMs(room))
+    }
+    tick()
+    const id = window.setInterval(tick, 1000)
+    return () => window.clearInterval(id)
+  }, [enabled, connectionState])
+
+  const toggleOperatorMic = useCallback(async () => {
+    const room = roomRef.current
+    if (!room || room.state !== ConnectionState.Connected) return
+    const lp = room.localParticipant
+    const next = !lp.isMicrophoneEnabled
+    try {
+      await lp.setMicrophoneEnabled(next)
+      setOperatorMicBlocked(false)
+      setOperatorMicEnabled(lp.isMicrophoneEnabled)
+      setIsLocalMicLive(lp.isMicrophoneEnabled)
+    } catch (e) {
+      console.warn('[livekit] toggle mic failed', e)
+      setOperatorMicBlocked(true)
+    }
+  }, [])
 
   return {
     connectionState,
@@ -232,5 +294,9 @@ export function useLiveKitCallerVideo(
     localMicError,
     error,
     isSessionLoading,
+    signalRttMs,
+    operatorMicEnabled,
+    operatorMicBlocked,
+    toggleOperatorMic,
   }
 }

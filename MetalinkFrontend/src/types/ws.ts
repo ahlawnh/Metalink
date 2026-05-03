@@ -6,6 +6,7 @@ export type BackendEventType =
   | 'alert.critical'
   | 'pipeline.status'
   | 'heartbeat'
+  | 'client.pong'
 
 export interface WsEnvelope {
   schema_version: string

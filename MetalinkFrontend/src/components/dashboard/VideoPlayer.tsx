@@ -22,13 +22,13 @@ function FallbackTelemetryVideo({
   streamUrl,
   posterUrl,
   streamStatus = 'connected',
-  latencyMs = 42,
+  wsLatencyMs = null,
 }: {
   src?: string | null
   streamUrl?: string | null
   posterUrl?: string | null
   streamStatus?: VideoTelemetry['streamStatus']
-  latencyMs?: number
+  wsLatencyMs?: number | null
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const shellRef = useRef<HTMLDivElement>(null)
@@ -37,6 +37,8 @@ function FallbackTelemetryVideo({
   const [isPlaying, setIsPlaying] = useState(true)
   const [isMuted, setIsMuted] = useState(true)
   const [floating, setFloating] = useState(false)
+  /** Controlled drag offset so docking clears react-draggable's transform (otherwise the card stays displaced). */
+  const [dragPos, setDragPos] = useState({ x: 0, y: 0 })
   const [pipActive, setPipActive] = useState(false)
   const [mediaPlaying, setMediaPlaying] = useState(false)
 
@@ -116,7 +118,10 @@ function FallbackTelemetryVideo({
     else void root.requestFullscreen()
   }, [])
 
-  const dockFloating = useCallback(() => setFloating(false), [])
+  const dockFloating = useCallback(() => {
+    setDragPos({ x: 0, y: 0 })
+    setFloating(false)
+  }, [])
 
   const handlePopOutClick = useCallback(async () => {
     const v = videoRef.current
@@ -136,13 +141,16 @@ function FallbackTelemetryVideo({
       try {
         await v.requestPictureInPicture()
         setFloating(false)
+        setDragPos({ x: 0, y: 0 })
         return
       } catch {
+        setDragPos({ x: 0, y: 0 })
         setFloating(true)
         return
       }
     }
 
+    setDragPos({ x: 0, y: 0 })
     setFloating(true)
   }, [floating, dockFloating])
 
@@ -191,7 +199,11 @@ function FallbackTelemetryVideo({
           {pipActive ? 'Exit PiP' : floating ? 'Dock' : 'Pop-out'}
         </button>
         <span className="ml-auto font-data text-[11px] font-semibold tabular-nums text-[var(--dash-text-primary)]">
-          Latency <span className="text-[var(--dash-accent)]">{latencyMs}</span> ms
+          WS latency{' '}
+          <span className="text-[var(--dash-accent)]">
+            {typeof wsLatencyMs === 'number' ? wsLatencyMs : '—'}
+          </span>{' '}
+          ms
         </span>
       </div>
 
@@ -265,20 +277,32 @@ function FallbackTelemetryVideo({
         </div>
       ) : null}
 
-      <Draggable disabled={!floating} handle=".video-drag-handle" nodeRef={dragNodeRef} cancel="button">
+      <Draggable
+        nodeRef={dragNodeRef}
+        disabled={!floating}
+        handle=".video-drag-handle"
+        cancel="button"
+        position={floating ? dragPos : { x: 0, y: 0 }}
+        onDrag={(_, data) => {
+          if (floating) setDragPos({ x: data.x, y: data.y })
+        }}
+        onStop={(_, data) => {
+          if (floating) setDragPos({ x: data.x, y: data.y })
+        }}
+      >
         {cardBody}
       </Draggable>
     </>
   )
 }
 
-/** LiveKit subscriber: remote caller camera + mic; audio playback uses a separate `<audio>` node. */
+/** LiveKit: caller A/V in + operator mic out (camera never published). */
 function LiveKitCallerVideo({
-  latencyMs = 42,
+  wsLatencyMs = null,
   posterUrl,
   streamStatus = 'connected',
 }: {
-  latencyMs?: number
+  wsLatencyMs?: number | null
   posterUrl?: string | null
   streamStatus?: VideoTelemetry['streamStatus']
 }) {
@@ -296,12 +320,19 @@ function LiveKitCallerVideo({
     localMicError,
     error,
     isSessionLoading,
+    signalRttMs,
+    operatorMicEnabled,
+    operatorMicBlocked,
+    toggleOperatorMic,
   } = useLiveKitCallerVideo(true, videoRef, audioRef)
+
+  const displayLatencyMs = signalRttMs ?? wsLatencyMs ?? null
 
   const [isPlaying, setIsPlaying] = useState(true)
   /** Local speaker mute for the remote audio track (does not change caller's mic). */
   const [localSpeakerMuted, setLocalSpeakerMuted] = useState(false)
   const [floating, setFloating] = useState(false)
+  const [dragPos, setDragPos] = useState({ x: 0, y: 0 })
   const [pipActive, setPipActive] = useState(false)
   const [mediaPlaying, setMediaPlaying] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -396,7 +427,7 @@ function LiveKitCallerVideo({
       setCallerAudioIssue(
         e instanceof Error
           ? e.message
-          : 'Browser blocked caller audio. Click Enable caller audio again.',
+          : 'Browser blocked caller audio. Tap Unmute to try again.',
       )
     }
   }, [])
@@ -421,7 +452,10 @@ function LiveKitCallerVideo({
     else void root.requestFullscreen()
   }, [])
 
-  const dockFloating = useCallback(() => setFloating(false), [])
+  const dockFloating = useCallback(() => {
+    setDragPos({ x: 0, y: 0 })
+    setFloating(false)
+  }, [])
 
   const handlePopOutClick = useCallback(async () => {
     const v = videoRef.current
@@ -441,13 +475,16 @@ function LiveKitCallerVideo({
       try {
         await v.requestPictureInPicture()
         setFloating(false)
+        setDragPos({ x: 0, y: 0 })
         return
       } catch {
+        setDragPos({ x: 0, y: 0 })
         setFloating(true)
         return
       }
     }
 
+    setDragPos({ x: 0, y: 0 })
     setFloating(true)
   }, [floating, dockFloating])
 
@@ -533,11 +570,18 @@ function LiveKitCallerVideo({
         >
           {localSpeakerMuted ? 'Unmute' : 'Mute'}
         </button>
-        {hasRemoteAudio && !remoteMicMuted ? (
-          <button type="button" onClick={() => void enableCallerAudio()} className={ctrlBtn}>
-            Enable caller audio
-          </button>
-        ) : null}
+        <button
+          type="button"
+          onClick={() => void toggleOperatorMic()}
+          title={
+            operatorMicBlocked
+              ? 'Microphone unavailable — allow access in the browser or check LiveKit token (publish mic).'
+              : 'Push-to-console: speak to the caller over LiveKit'
+          }
+          className={cn(ctrlBtn, operatorMicBlocked && 'opacity-60')}
+        >
+          {operatorMicBlocked ? 'Mic blocked' : operatorMicEnabled ? 'TX off' : 'TX on'}
+        </button>
         <button type="button" onClick={toggleFullscreen} className={ctrlBtn}>
           {isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
         </button>
@@ -545,7 +589,11 @@ function LiveKitCallerVideo({
           {pipActive ? 'Exit PiP' : floating ? 'Dock' : 'Pop-out'}
         </button>
         <span className="ml-auto font-data text-[11px] font-semibold tabular-nums text-[var(--dash-text-primary)]">
-          Latency <span className="text-[var(--dash-accent)]">{latencyMs}</span> ms
+          RTT{' '}
+          <span className="text-[var(--dash-accent)]">
+            {typeof displayLatencyMs === 'number' ? displayLatencyMs : '—'}
+          </span>{' '}
+          ms
         </span>
       </div>
 
@@ -582,7 +630,7 @@ function LiveKitCallerVideo({
             className="pointer-events-auto inline-flex max-w-[18rem] items-center gap-2 rounded-md border border-amber-500/50 bg-[color-mix(in_srgb,#FFB74D18%,var(--dash-bg))] px-2.5 py-1 text-[10px] font-medium leading-snug text-[#FFE082]"
             title={callerAudioIssue ?? undefined}
           >
-            Browser blocked audio. Click Enable caller audio.
+            Browser blocked audio. Tap Unmute.
           </span>
         ) : null}
         {localMicError ? (
@@ -665,7 +713,19 @@ function LiveKitCallerVideo({
         </div>
       ) : null}
 
-      <Draggable disabled={!floating} handle=".video-drag-handle" nodeRef={dragNodeRef} cancel="button">
+      <Draggable
+        nodeRef={dragNodeRef}
+        disabled={!floating}
+        handle=".video-drag-handle"
+        cancel="button"
+        position={floating ? dragPos : { x: 0, y: 0 }}
+        onDrag={(_, data) => {
+          if (floating) setDragPos({ x: data.x, y: data.y })
+        }}
+        onStop={(_, data) => {
+          if (floating) setDragPos({ x: data.x, y: data.y })
+        }}
+      >
         {cardBody}
       </Draggable>
     </>
@@ -677,7 +737,8 @@ interface VideoPlayerProps {
   streamUrl?: string | null
   posterUrl?: string | null
   streamStatus?: VideoTelemetry['streamStatus']
-  latencyMs?: number
+  /** Telemetry WebSocket RTT; LiveKit path prefers signal RTT when connected. */
+  wsLatencyMs?: number | null
 }
 
 export default function VideoPlayer({
@@ -685,11 +746,11 @@ export default function VideoPlayer({
   streamUrl,
   posterUrl,
   streamStatus,
-  latencyMs = 42,
+  wsLatencyMs = null,
 }: VideoPlayerProps) {
   if (shouldUseLiveKit()) {
     return (
-      <LiveKitCallerVideo latencyMs={latencyMs} posterUrl={posterUrl} streamStatus={streamStatus} />
+      <LiveKitCallerVideo wsLatencyMs={wsLatencyMs} posterUrl={posterUrl} streamStatus={streamStatus} />
     )
   }
 
@@ -699,7 +760,7 @@ export default function VideoPlayer({
       streamUrl={streamUrl}
       posterUrl={posterUrl}
       streamStatus={streamStatus}
-      latencyMs={latencyMs}
+      wsLatencyMs={wsLatencyMs}
     />
   )
 }

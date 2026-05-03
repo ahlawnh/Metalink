@@ -1,19 +1,13 @@
 import CallerLocationMapPanel from '@/components/dashboard/CallerLocationMapPanel'
-import PatientHeartMonitor from '@/components/dashboard/PatientHeartMonitor'
-import TelemetryPanel from '@/components/dashboard/TelemetryPanel'
+import VitalsTelemetryCards from '@/components/dashboard/VitalsTelemetryCards'
 import TranscriptSummary from '@/components/dashboard/TranscriptSummary'
 import VideoPlayer from '@/components/dashboard/VideoPlayer'
 import { useTelemetryStream } from '@/hooks/useTelemetryStream'
 import { cn } from '@/lib/utils'
 
 export function MainLayout() {
-  const {
-    telemetry,
-    connectionState,
-    requestRollingSummary,
-    subscribeRollingSummary,
-    requestCallerLocationRefresh,
-  } = useTelemetryStream()
+  const { telemetry, connectionState, wsLatencyMs, requestRollingSummary, subscribeRollingSummary } =
+    useTelemetryStream()
 
   const connectionTone =
     connectionState === 'connected'
@@ -63,21 +57,20 @@ export function MainLayout() {
               streamUrl={telemetry.video.streamUrl}
               posterUrl={telemetry.video.posterUrl}
               streamStatus={telemetry.video.streamStatus}
-              latencyMs={42}
+              wsLatencyMs={wsLatencyMs}
             />
           </div>
-          <CallerLocationMapPanel
-            location={telemetry.caller_location}
-            onRefreshLocation={requestCallerLocationRefresh}
-            wsConnected={connectionState === 'connected'}
-          />
+          <CallerLocationMapPanel location={telemetry.caller_location} />
         </div>
       </div>
 
       {/* Half screen: patient vitals + transcript */}
       <div className="flex min-h-0 flex-col gap-4 lg:min-h-dvh">
-        <PatientHeartMonitor patient={telemetry.patient_heart} />
-        <TelemetryPanel telemetry={telemetry.respiratory} />
+        <VitalsTelemetryCards
+          patient={telemetry.patient_heart}
+          respiratory={telemetry.respiratory}
+          telemetryCueRevision={Math.floor(Date.parse(telemetry.updatedAt) / 1000) || 0}
+        />
         <TranscriptSummary
           chunks={telemetry.transcript}
           requestRollingSummary={requestRollingSummary}
