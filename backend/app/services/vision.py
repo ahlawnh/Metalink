@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import random
 from dataclasses import dataclass
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -90,6 +93,11 @@ async def analyze_frame_with_gpt54(
     """
 
     if mock_ai or os.getenv("MOCK_AI", "true").lower() in {"1", "true", "yes", "on"}:
+        logger.debug(
+            "vision: skipping OpenAI (mock): mock_ai=%s MOCK_AI=%r",
+            mock_ai,
+            os.getenv("MOCK_AI"),
+        )
         return _mock_vision(seed=seed)
 
     # Optional dependency: do not hard-require OpenAI SDK during early mock phase.
@@ -106,36 +114,52 @@ async def analyze_frame_with_gpt54(
 
     client = AsyncOpenAI(api_key=api_key)
 
+    banner = (
+        f"[vision-debug] calling OpenAI Responses API model={model!r} jpeg_base64_chars={len(frame_b64_jpeg)} "
+        f"(dashboard usage should increment after this)"
+    )
+    logger.info(banner)
+    print(banner, flush=True)
+
     # NOTE: We keep the request shape intentionally simple to avoid fighting SDK/version
     # differences during a hackathon. If the SDK changes, you update only this function.
-    resp = await client.responses.create(
-        model=model,
-        input=[
-            {
-                "role": "system",
-                "content": [{"type": "input_text", "text": VISION_SYSTEM_PROMPT}],
-            },
-            {
-                "role": "user",
-                "content": [
-                    {"type": "input_text", "text": "Analyze this single frame."},
-                    {"type": "input_image", "image_url": f"data:image/jpeg;base64,{frame_b64_jpeg}"},
-                ],
-            },
-        ],
-        # Try to force JSON. If the SDK/model doesn't support it, we'll fall back to parsing.
-        response_format={"type": "json_object"},
-    )
+    try:
+        resp = await client.responses.create(
+            model=model,
+            input=[
+                {
+                    "role": "system",
+                    "content": [{"type": "input_text", "text": VISION_SYSTEM_PROMPT}],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "input_text", "text": "Analyze this single frame."},
+                        {"type": "input_image", "image_url": f"data:image/jpeg;base64,{frame_b64_jpeg}"},
+                    ],
+                },
+            ],
+            # Try to force JSON. If the SDK/model doesn't support it, we'll fall back to parsing.
+            response_format={"type": "json_object"},
+        )
+    except Exception:
+        logger.exception("[vision-debug] OpenAI responses.create failed model=%r", model)
+        raise
 
     text = getattr(resp, "output_text", None)
     if not text:
         # Fallback: attempt to find a text output segment
         try:
             text = resp.output[0].content[0].text  # type: ignore[attr-defined]
-        except Exception:
-            raise RuntimeError("OpenAI response missing output_text; cannot parse.")
+        except Exception as parse_exc:
+            logger.exception("[vision-debug] OpenAI response missing output_text")
+            raise RuntimeError("OpenAI response missing output_text; cannot parse.") from parse_exc
 
-    data = json.loads(text)
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        logger.exception("[vision-debug] JSON parse failed on model output (first 200 chars): %s", text[:200])
+        raise
 
     hazards = data.get("hazards") or []
     # RR is not taken from vision (single frame); telemetry_aggregate fills RR from "breathe" cadence.

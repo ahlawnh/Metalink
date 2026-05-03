@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import logging
 import os
 import time
 from dataclasses import dataclass
 from typing import Any, Optional, Literal
+from urllib.parse import urlparse
 
 from app.services.telemetry_aggregate import (
     TelemetryState,
@@ -16,6 +18,8 @@ from app.services.telemetry_aggregate import (
 )
 from app.services.transcription import TranscriptChunk, deepgram_stream_from_pcm16, mock_transcript_stream
 from app.services.vision import VisionResult, analyze_frame_with_gpt54
+
+logger = logging.getLogger(__name__)
 
 _DG_SAMPLE_RATE = 16000
 TranscriptSpeaker = Literal["caller", "dispatcher"]
@@ -80,6 +84,32 @@ def _identity_from_track_args(args: tuple[Any, ...]) -> str:
     return ""
 
 
+def _livekit_connect_debug_line(*, url: str, room: str, identity: str) -> str:
+    """Log host + room (no secrets). Compare to your PWA token's `url` + `room` in Network tab."""
+    try:
+        raw = (url or "").strip()
+        if not raw:
+            host = "(LIVEKIT_URL empty)"
+        else:
+            if "://" not in raw:
+                raw = "wss://" + raw
+            host = urlparse(raw).hostname or raw[:64]
+    except Exception:
+        host = url[:64] if url else "?"
+    env_room_raw = (os.getenv("LIVEKIT_ROOM") or "").strip()
+    if not env_room_raw:
+        room_note = "env LIVEKIT_ROOM unset (FastAPI uses default aegis-link-demo if applicable)"
+    elif env_room_raw == room:
+        room_note = "env LIVEKIT_ROOM matches cfg.room"
+    else:
+        room_note = f"MISMATCH: os.environ LIVEKIT_ROOM={env_room_raw!r} but cfg.room={room!r}"
+    return (
+        f"[ingest-debug] LiveKit join target: host={host!r} room={room!r} backend_identity={identity!r} "
+        f"| env LIVEKIT_URL set={'yes' if (os.getenv('LIVEKIT_URL') or '').strip() else 'NO'} "
+        f"| {room_note}"
+    )
+
+
 def _vision_to_state_dict(vr: VisionResult) -> dict[str, Any]:
     return {
         "hazards": vr.hazards,
@@ -140,6 +170,17 @@ async def run_ingestion_loop(
         )
         return
 
+    logger.info(
+        "[ingest-debug] live LiveKit path mock_ai=%s env MOCK_AI=%r OPENAI_KEY_set=%s",
+        mock_ai,
+        os.getenv("MOCK_AI"),
+        bool((os.getenv("OPENAI_API_KEY") or "").strip()),
+    )
+    print(
+        f"[ingest-debug] ingest LIVEKIT path MOCK_AI={mock_ai} OPENAI_KEY_set={bool((os.getenv('OPENAI_API_KEY') or '').strip())}",
+        flush=True,
+    )
+
     # Optional dependency: keep isolated so mock mode works without LiveKit.
     # RTC lives in `livekit`; AccessToken/VideoGrants live in `livekit-api` (`from livekit import api`).
     try:
@@ -151,6 +192,10 @@ async def run_ingestion_loop(
             "or set MOCK_AI=true to skip LiveKit."
         ) from e
 
+    connect_banner = _livekit_connect_debug_line(url=cfg.url, room=cfg.room, identity=cfg.identity)
+    logger.info(connect_banner)
+    print(connect_banner, flush=True)
+
     token = (
         api.AccessToken(cfg.api_key, cfg.api_secret)
         .with_identity(cfg.identity)
@@ -160,6 +205,8 @@ async def run_ingestion_loop(
 
     room = rtc.Room()
     await room.connect(cfg.url, token)
+    logger.info("[ingest-debug] room.connect() returned OK (same process as GET /api/livekit/broadcaster/token room=%s)", cfg.room)
+    print(f"[ingest-debug] room.connect() OK room={cfg.room!r}", flush=True)
 
     # Collect tracks (multiple video tracks possible; prefer camera over screen-share).
     video_tracks: list[Any] = []
@@ -170,6 +217,15 @@ async def run_ingestion_loop(
         kind = getattr(track, "kind", None)
         # TrackKind stringifies to "1"/"2", not "audio"/"video".
         if kind == rtc.TrackKind.KIND_VIDEO:
+            sid = getattr(track, "sid", None)
+            name = getattr(track, "name", None)
+            pub_identity = _identity_from_track_args(args)
+            msg = (
+                "[ingest-debug] VIDEO track subscribed: KIND_VIDEO confirmed | "
+                f"track_sid={sid!r} track_name={name!r} publisher_identity={pub_identity!r}"
+            )
+            logger.info(msg)
+            print(msg, flush=True)
             video_tracks.append(track)
         elif kind == rtc.TrackKind.KIND_AUDIO:
             identity = _identity_from_track_args(args)
@@ -196,6 +252,18 @@ async def run_ingestion_loop(
         await asyncio.sleep(0.1)
 
     video_track = _pick_preferred_camera_video_track(video_tracks)
+    if video_track is None:
+        w = (
+            "[ingest-debug] WARNING: no remote VIDEO track after wait — OpenAI vision will NOT run. "
+            "Common causes: camera off, publisher video not started, or wrong room. "
+            f"audio_tracks_started={list(transcript_tasks.keys())!r}"
+        )
+        logger.warning(w)
+        print(w, flush=True)
+    else:
+        vmsg = f"[ingest-debug] starting vision loop (sample every {cfg.frame_sample_interval_s}s) openai_model={openai_model!r}"
+        logger.info(vmsg)
+        print(vmsg, flush=True)
 
     if video_track is not None:
         tasks.append(
@@ -273,6 +341,9 @@ async def _vision_loop_from_livekit_track(
 
     stream = rtc.VideoStream(video_track)
     last = 0.0
+    frame_tick = 0
+    logger.info("[ingest-debug] VideoStream opened; waiting for frames -> JPEG -> OpenAI")
+    print("[ingest-debug] VideoStream opened; sampling frames for vision", flush=True)
     try:
         async for event in stream:
             now = time.time()
@@ -283,7 +354,9 @@ async def _vision_loop_from_livekit_track(
             vf = event.frame
             try:
                 rgb = vf.convert(rtc.VideoBufferType.RGB24)
-            except Exception:
+            except Exception as conv_exc:
+                logger.warning("[ingest-debug] vf.convert(RGB24) failed (skipping frame): %s", conv_exc, exc_info=True)
+                print(f"[ingest-debug] vf.convert(RGB24) FAILED: {conv_exc!r}", flush=True)
                 continue
 
             try:
@@ -293,13 +366,30 @@ async def _vision_loop_from_livekit_track(
                 buf = BytesIO()
                 im.save(buf, format="JPEG", quality=85, optimize=True)
                 jpeg_bytes = buf.getvalue()
-            except Exception:
+            except Exception as pil_exc:
+                logger.warning("[ingest-debug] PIL JPEG encode failed (skipping frame): %s", pil_exc, exc_info=True)
+                print(f"[ingest-debug] PIL JPEG encode FAILED: {pil_exc!r}", flush=True)
                 continue
 
             jpeg_bytes = await _downscale_jpeg_to_max_width(jpeg_bytes, max_width=frame_max_width)
             frame_b64 = base64.b64encode(jpeg_bytes).decode("ascii")
+            frame_tick += 1
 
-            vr: VisionResult = await analyze_frame_with_gpt54(frame_b64_jpeg=frame_b64, model=openai_model)
+            pre = (
+                f"[ingest-debug] ABOUT TO CALL analyze_frame_with_gpt54 tick={frame_tick} "
+                f"jpeg_bytes={len(jpeg_bytes)} b64_len={len(frame_b64)} model={openai_model!r} "
+                f"frame_rgb={rgb.width}x{rgb.height}"
+            )
+            logger.info(pre)
+            print(pre, flush=True)
+
+            try:
+                vr: VisionResult = await analyze_frame_with_gpt54(frame_b64_jpeg=frame_b64, model=openai_model)
+            except Exception as vision_exc:
+                logger.exception("[ingest-debug] analyze_frame_with_gpt54 FAILED tick=%s", frame_tick)
+                print(f"[ingest-debug] analyze_frame_with_gpt54 FAILED tick={frame_tick}: {vision_exc!r}", flush=True)
+                raise
+
             state.latest_vision = _vision_to_state_dict(vr)
             await publish_telemetry(state)
     finally:
