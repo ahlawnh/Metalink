@@ -361,11 +361,14 @@ export default function CallerLocationMapPanel({
             <GoogleMapEmbed center={center} accuracyM={location.accuracy_m} />
           </button>
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
-            <p className="text-sm font-medium text-[var(--dash-text-secondary)]">
-              Interactive map disabled — add{' '}
-              <span className="font-data text-[var(--dash-text-primary)]">VITE_GOOGLE_MAPS_API_KEY</span> to enable live
-              tiles.
+          <div className="flex h-full flex-col items-center justify-center gap-1.5 px-4 text-center">
+            <p className="text-sm font-semibold text-[var(--dash-text-primary)]">
+              {mapsKey ? 'Awaiting caller position' : 'Live map unavailable'}
+            </p>
+            <p className="max-w-[18rem] text-xs leading-snug text-[var(--dash-text-secondary)]">
+              {mapsKey
+                ? 'The map will load automatically once GPS coordinates are received from the caller feed.'
+                : 'Satellite and street basemaps are not enabled for this deployment. Latitude, longitude, and accuracy still appear in this panel when location telemetry is received.'}
             </p>
           </div>
         )}
