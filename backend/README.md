@@ -54,6 +54,14 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 - HTTP base: `http://127.0.0.1:8000`
 - OpenAPI docs: `http://127.0.0.1:8000/docs`
 
+### Incident-feed (bystander) + telemetry
+
+- **Operator dashboard** token (subscriber): `GET /api/livekit/token`
+- **Bystander / incident_feed** token (publish camera + mic): `GET /api/livekit/broadcaster/token`
+- **Incident telemetry** (location + vitals batches): `POST /api/incident/telemetry`
+
+Configure **`BACKEND_INTERNAL_URL=http://127.0.0.1:8000`** in `incident_feed/.env.local` so Next.js API routes can proxy to FastAPI. Requires **`livekit-api`** plus **`LIVEKIT_URL`**, **`LIVEKIT_API_KEY`**, **`LIVEKIT_API_SECRET`**, **`LIVEKIT_ROOM`** for real LiveKit joins.
+
 ## Quick health checks
 
 ```bash
