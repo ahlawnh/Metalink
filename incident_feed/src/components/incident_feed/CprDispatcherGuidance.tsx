@@ -8,7 +8,7 @@ import {
 } from "@/lib/cprVibrate";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-type Phase = "hidden" | "intro" | "countdown" | "vibrating";
+type Phase = "hidden" | "opt_in" | "intro" | "countdown" | "vibrating";
 
 type Props = {
   cue: IncidentCprHapticCue;
@@ -56,18 +56,9 @@ export function CprDispatcherGuidance({ cue }: Props) {
       clearCountdown();
       clearBuzz();
       setActiveBpm(cue.bpm);
-      setPhase("intro");
+      // Must not play audio here — mobile Safari blocks sound until the user taps (see opt-in step).
+      setPhase("opt_in");
       setCountdown(5);
-      pulseCprVibration(cue.bpm);
-      void resumeAudioContext().then((ctx) => {
-        if (ctx) {
-          playCprBuzzPulse(ctx, {
-            peakGain: 0.52,
-            durationSec: 0.1,
-            freqHz: 66,
-          });
-        }
-      });
       return;
     }
 
@@ -118,6 +109,25 @@ export function CprDispatcherGuidance({ cue }: Props) {
     setPhase("vibrating");
   }, []);
 
+  const onDeclineMetronome = useCallback(() => {
+    clearCountdown();
+    clearBuzz();
+    setPhase("hidden");
+  }, [clearBuzz, clearCountdown]);
+
+  /** User gesture: unlock Web Audio + sample buzz, then instructions. */
+  const onAcceptMetronome = useCallback(async () => {
+    const ctx = await resumeAudioContext();
+    if (ctx) {
+      playCprBuzzPulse(ctx, {
+        peakGain: 0.2,
+        durationSec: 0.09,
+        freqHz: 72,
+      });
+    }
+    setPhase("intro");
+  }, []);
+
   const onUnderstood = useCallback(() => {
     pulseCprVibration(bpmRef.current);
     void resumeAudioContext().then((ctx) => {
@@ -159,6 +169,40 @@ export function CprDispatcherGuidance({ cue }: Props) {
       aria-labelledby="cpr-guidance-title"
     >
       <div className="max-w-md rounded-2xl border border-white/15 bg-neutral-900 p-6 text-center shadow-2xl">
+        {phase === "opt_in" ? (
+          <>
+            <h2
+              id="cpr-guidance-title"
+              className="text-lg font-semibold tracking-tight text-white"
+            >
+              CPR speaker metronome?
+            </h2>
+            <p className="mt-3 text-left text-sm leading-relaxed text-white/85">
+              Dispatch wants to send compression tempo cues as low-frequency buzzes through this
+              phone&apos;s speaker. Your browser only allows that after you tap to confirm.
+            </p>
+            <p className="mt-3 text-left text-xs leading-snug text-amber-200/90">
+              Turn volume up first. Tap &quot;Allow sound&quot; — you should hear one short test buzz.
+            </p>
+            <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
+              <button
+                type="button"
+                onClick={onDeclineMetronome}
+                className="w-full rounded-xl border border-white/20 bg-transparent px-4 py-3 text-sm font-semibold text-white/85 hover:bg-white/10 sm:w-auto sm:min-w-[8rem]"
+              >
+                Not now
+              </button>
+              <button
+                type="button"
+                onClick={() => void onAcceptMetronome()}
+                className="w-full rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-neutral-950 hover:bg-emerald-400 sm:w-auto sm:min-w-[10rem]"
+              >
+                Allow sound
+              </button>
+            </div>
+          </>
+        ) : null}
+
         {phase === "intro" ? (
           <>
             <h2
