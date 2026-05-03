@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* LiveKit prefab theme — light shell when relay is active */
+  --lk-bg: #ffffff;
+  --lk-fg: #111827;
+  --lk-border-radius: 14px;
+}
+
+body {
+  @apply min-h-screen bg-[#f6f5f2] text-neutral-900 antialiased;
+}
+
+/* Softer LiveKit chrome inside our white card */
+.lk-scope .lk-video-conference {
+  background: #ffffff;
+}
+
+.lk-scope .lk-control-bar {
+  border-top-color: rgba(0, 0, 0, 0.06);
+}
