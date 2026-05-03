@@ -140,7 +140,7 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 For full backend setup, environment variables, WebSocket contract, and troubleshooting, see [`backend/README.md`](backend/README.md).
 
-## Demo Flow for Judges
+## Demo Flow 
 
 1. Start backend and frontend.
 2. Show the dispatcher dashboard connection state and session header.
