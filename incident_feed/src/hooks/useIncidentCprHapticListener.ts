@@ -1,6 +1,9 @@
 "use client";
 
-import { buildTelemetryWsUrl } from "@/lib/telemetryWsUrl";
+import {
+  buildTelemetryWsUrl,
+  isWsTelemetryBlockedByMixedContent,
+} from "@/lib/telemetryWsUrl";
 import { useEffect, useState } from "react";
 
 export type IncidentCprHapticCue =
@@ -8,6 +11,7 @@ export type IncidentCprHapticCue =
   | { kind: "on"; bpm: number };
 
 const RECONNECT_MS = 3000;
+const POLL_MS = 650;
 
 function parseCueFromPayload(payload: unknown): IncidentCprHapticCue | null {
   if (!payload || typeof payload !== "object") return null;
@@ -38,9 +42,27 @@ function parseCueFromPayload(payload: unknown): IncidentCprHapticCue | null {
   return null;
 }
 
+function mergeCue(
+  prev: IncidentCprHapticCue,
+  next: IncidentCprHapticCue | null,
+): IncidentCprHapticCue {
+  if (next === null) return prev;
+  if (next.kind === "off") {
+    return prev.kind === "off" ? prev : next;
+  }
+  if (
+    prev.kind === "on" &&
+    next.kind === "on" &&
+    prev.bpm === next.bpm
+  ) {
+    return prev;
+  }
+  return next;
+}
+
 /**
- * Subscribes to telemetry WebSocket only to read `haptic_cue` updates.
- * Ignores frames that omit `haptic_cue` or send `null` so routine vitals traffic does not clear an active cue.
+ * Subscribes to CPR haptic cues: telemetry WebSocket when allowed, plus HTTP polling as fallback
+ * (HTTPS pages cannot use ws:// to a plain FastAPI server — mixed content).
  */
 export function useIncidentCprHapticListener(enabled: boolean): IncidentCprHapticCue {
   const [cue, setCue] = useState<IncidentCprHapticCue>({ kind: "off" });
@@ -54,7 +76,31 @@ export function useIncidentCprHapticListener(enabled: boolean): IncidentCprHapti
     let cancelled = false;
     let socket: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-    const url = buildTelemetryWsUrl();
+    let pollTimer: number | null = null;
+
+    const wsUrl = buildTelemetryWsUrl();
+    const wsBlocked = isWsTelemetryBlockedByMixedContent(wsUrl);
+
+    const applyParsed = (next: IncidentCprHapticCue | null) => {
+      if (cancelled || next === null) return;
+      setCue((prev) => mergeCue(prev, next));
+    };
+
+    const pollSnapshot = async () => {
+      try {
+        const res = await fetch("/api/telemetry/haptic-snapshot", {
+          cache: "no-store",
+        });
+        if (!res.ok || cancelled) return;
+        const body = (await res.json()) as { haptic_cue?: unknown };
+        applyParsed(parseCueFromPayload({ haptic_cue: body.haptic_cue }));
+      } catch {
+        /* offline */
+      }
+    };
+
+    void pollSnapshot();
+    pollTimer = window.setInterval(() => void pollSnapshot(), POLL_MS);
 
     const clearReconnect = () => {
       if (reconnectTimer !== null) {
@@ -63,10 +109,10 @@ export function useIncidentCprHapticListener(enabled: boolean): IncidentCprHapti
       }
     };
 
-    const connect = () => {
+    const connectWs = () => {
       clearReconnect();
-      if (cancelled) return;
-      socket = new WebSocket(url);
+      if (cancelled || wsBlocked) return;
+      socket = new WebSocket(wsUrl);
 
       socket.onmessage = (event) => {
         try {
@@ -75,37 +121,29 @@ export function useIncidentCprHapticListener(enabled: boolean): IncidentCprHapti
             payload?: unknown;
           };
           if (data.event_type !== "telemetry.update") return;
-          const next = parseCueFromPayload(data.payload);
-          if (next === null) return;
-          setCue((prev) => {
-            if (next.kind === "off") {
-              return prev.kind === "off" ? prev : next;
-            }
-            if (
-              prev.kind === "on" &&
-              next.kind === "on" &&
-              prev.bpm === next.bpm
-            ) {
-              return prev;
-            }
-            return next;
-          });
+          applyParsed(parseCueFromPayload(data.payload));
         } catch {
           /* ignore */
         }
       };
 
       socket.onclose = () => {
-        if (cancelled) return;
-        reconnectTimer = setTimeout(connect, RECONNECT_MS);
+        if (cancelled || wsBlocked) return;
+        reconnectTimer = setTimeout(connectWs, RECONNECT_MS);
       };
     };
 
-    connect();
+    if (!wsBlocked) {
+      connectWs();
+    }
 
     return () => {
       cancelled = true;
       clearReconnect();
+      if (pollTimer !== null) {
+        window.clearInterval(pollTimer);
+        pollTimer = null;
+      }
       socket?.close();
       socket = null;
     };

@@ -2,6 +2,10 @@
 
 import type { IncidentCprHapticCue } from "@/hooks/useIncidentCprHapticListener";
 import { playCprBuzzPulse, resumeAudioContext } from "@/lib/cprBuzzAudio";
+import {
+  cancelCprVibration,
+  pulseCprVibration,
+} from "@/lib/cprVibrate";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Phase = "hidden" | "intro" | "countdown" | "vibrating";
@@ -24,6 +28,7 @@ export function CprDispatcherGuidance({ cue }: Props) {
       window.clearInterval(buzzIntervalRef.current);
       buzzIntervalRef.current = null;
     }
+    cancelCprVibration();
   }, []);
 
   const clearCountdown = useCallback(() => {
@@ -53,12 +58,13 @@ export function CprDispatcherGuidance({ cue }: Props) {
       setActiveBpm(cue.bpm);
       setPhase("intro");
       setCountdown(5);
+      pulseCprVibration(cue.bpm);
       void resumeAudioContext().then((ctx) => {
         if (ctx) {
           playCprBuzzPulse(ctx, {
-            peakGain: 0.21,
-            durationSec: 0.09,
-            freqHz: 72,
+            peakGain: 0.52,
+            durationSec: 0.1,
+            freqHz: 66,
           });
         }
       });
@@ -75,9 +81,11 @@ export function CprDispatcherGuidance({ cue }: Props) {
     void resumeAudioContext().then((ctx) => {
       if (cancelled || !ctx) return;
       const periodMs = Math.round(60000 / activeBpm);
+      pulseCprVibration(activeBpm);
       playCprBuzzPulse(ctx);
       if (cancelled) return;
       const id = window.setInterval(() => {
+        pulseCprVibration(activeBpm);
         playCprBuzzPulse(ctx);
       }, periodMs);
       if (cancelled) {
@@ -93,6 +101,7 @@ export function CprDispatcherGuidance({ cue }: Props) {
         window.clearInterval(buzzIntervalRef.current);
         buzzIntervalRef.current = null;
       }
+      cancelCprVibration();
     };
   }, [phase, activeBpm]);
 
@@ -110,8 +119,14 @@ export function CprDispatcherGuidance({ cue }: Props) {
   }, []);
 
   const onUnderstood = useCallback(() => {
+    pulseCprVibration(bpmRef.current);
     void resumeAudioContext().then((ctx) => {
-      if (ctx) playCprBuzzPulse(ctx, { peakGain: 0.12, durationSec: 0.055, freqHz: 88 });
+      if (ctx)
+        playCprBuzzPulse(ctx, {
+          peakGain: 0.34,
+          durationSec: 0.075,
+          freqHz: 74,
+        });
     });
     setPhase("countdown");
     setCountdown(5);
@@ -156,15 +171,16 @@ export function CprDispatcherGuidance({ cue }: Props) {
               <li className="flex gap-2">
                 <span className="font-semibold text-emerald-400">1.</span>
                 <span>
-                  Turn your volume up so you can hear the low buzz through the speaker.
-                  Place the phone nearby where you can hear it clearly while doing
-                  compressions.
+                  Put the phone in a pocket or against your body where you can feel
+                  vibrations <span className="text-white/70">(Android)</span> or hear the
+                  buzz through the speaker <span className="text-white/70">(iPhone)</span>.
+                  Turn volume up if you rely on sound.
                 </span>
               </li>
               <li className="flex gap-2">
                 <span className="font-semibold text-emerald-400">2.</span>
                 <span>
-                  After the countdown, each buzz is your cue to push on the chest —
+                  After the countdown, each vibration or buzz marks when to compress —
                   stay on that steady beat.
                 </span>
               </li>
@@ -182,7 +198,8 @@ export function CprDispatcherGuidance({ cue }: Props) {
         {phase === "countdown" ? (
           <>
             <p className="text-base font-medium text-white">
-              Buzz cues will start in {countdown} second{countdown === 1 ? "" : "s"}.
+              Vibrations / buzz will start in {countdown} second
+              {countdown === 1 ? "" : "s"}.
             </p>
             <p
               className="mt-6 font-data text-7xl font-bold tabular-nums text-emerald-400"
@@ -191,14 +208,16 @@ export function CprDispatcherGuidance({ cue }: Props) {
               {countdown > 0 ? countdown : "—"}
             </p>
             <p className="mt-4 text-xs text-white/55">
-              Keep the speaker unobstructed so you hear each buzz.
+              Keep the phone positioned so you feel each pulse or hear each buzz.
             </p>
           </>
         ) : null}
 
         {phase === "vibrating" && activeBpm ? (
           <>
-            <p className="text-lg font-semibold text-white">Compress with each buzz</p>
+            <p className="text-lg font-semibold text-white">
+              Compress with each vibration / buzz
+            </p>
             <p className="mt-2 text-sm text-white/75">
               Tempo: <span className="font-data tabular-nums text-emerald-400">{activeBpm}</span>{" "}
               compressions per minute

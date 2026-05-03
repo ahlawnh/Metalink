@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -24,6 +24,14 @@ from app.schemas.telemetry import (
 
 router = APIRouter(tags=["telemetry"])
 
+# Last CPR haptic broadcast (for HTTPS/PWA clients where ws:// is mixed-content blocked).
+_last_haptic_snapshot: Optional[dict[str, Any]] = None
+
+
+def _remember_haptic_snapshot(cue: HapticCue) -> None:
+    global _last_haptic_snapshot
+    _last_haptic_snapshot = cue.model_dump(mode="json")
+
 
 @router.get("/health")
 async def health_check() -> dict[str, str]:
@@ -33,6 +41,12 @@ async def health_check() -> dict[str, str]:
 @router.get("/telemetry/scenarios")
 async def list_mock_scenarios() -> dict[str, list[str]]:
     return {"scenarios": sorted(SUPPORTED_MOCK_SCENARIOS)}
+
+
+@router.get("/telemetry/haptic-snapshot")
+async def telemetry_haptic_snapshot() -> dict[str, Any]:
+    """Pollable CPR cue for browsers that cannot use insecure WebSocket from HTTPS pages."""
+    return {"haptic_cue": _last_haptic_snapshot}
 
 
 @router.get("/telemetry/status")
@@ -182,20 +196,20 @@ async def telemetry_websocket(websocket: WebSocket, scenario: Optional[str] = No
                     ),
                 )
             elif isinstance(data, dict) and data.get("event_type") == "dispatcher.cpr_guidance":
-                # Vitals panel: CPR tempo strictly 100–120 BPM.
+                # Vitals panel CPR — same BPM bounds as request.dispatch_cpr (60–140).
                 active = bool(data.get("active"))
                 raw_bpm = data.get("bpm")
                 haptic: HapticCue
                 if active:
                     try:
-                        bpm_int = int(raw_bpm) if raw_bpm is not None else 0
+                        bpm_int = int(raw_bpm) if raw_bpm is not None else 110
                     except (TypeError, ValueError):
-                        bpm_int = 0
-                    if not (100 <= bpm_int <= 120):
-                        continue
+                        bpm_int = 110
+                    bpm_int = max(60, min(140, bpm_int))
                     haptic = HapticCue(active=True, pattern="cpr_metronome", bpm=bpm_int)
                 else:
                     haptic = HapticCue(active=False, pattern="none", bpm=None)
+                _remember_haptic_snapshot(haptic)
                 await telemetry_manager.broadcast(
                     WebSocketEvent(
                         event_type=EventType.TELEMETRY_UPDATE,
@@ -214,6 +228,7 @@ async def telemetry_websocket(websocket: WebSocket, scenario: Optional[str] = No
                     cue = HapticCue(active=True, pattern="cpr_metronome", bpm=bpm)
                 else:
                     cue = HapticCue(active=False, pattern="none", bpm=None)
+                _remember_haptic_snapshot(cue)
                 await telemetry_manager.broadcast(
                     WebSocketEvent(
                         event_type=EventType.TELEMETRY_UPDATE,
