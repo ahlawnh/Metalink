@@ -46,19 +46,6 @@ load_dotenv(_backend_root / ".env", override=False)
 load_dotenv(_backend_root / ".env.local", override=True)
 
 
-def _stress_triggers_critical(buffer_lower: str) -> bool:
-    """Hackathon heuristic: panic / life-threat language in the rolling transcript."""
-    if "not breathing" in buffer_lower or "isn't breathing" in buffer_lower:
-        return True
-    if "help me" in buffer_lower and ("god" in buffer_lower or "please" in buffer_lower or "not" in buffer_lower):
-        return True
-    if "oh my god" in buffer_lower and ("breathing" in buffer_lower or "help" in buffer_lower):
-        return True
-    if "he's dying" in buffer_lower or "she's dying" in buffer_lower:
-        return True
-    return False
-
-
 async def _mic_pcm16_mono_16k(*, block_samples: int = 1600) -> AsyncIterator[bytes]:
     """
     Yield int16 mono PCM chunks at 16 kHz (Deepgram linear16).
@@ -108,6 +95,7 @@ async def main() -> None:
         )
         sys.exit(1)
 
+    from app.services.telemetry_aggregate import transcript_critical_stress
     from app.services.transcription import TranscriptChunk, deepgram_stream_from_pcm16
 
     print("[info] Deepgram live from default microphone (16 kHz mono PCM). Ctrl+C to stop.")
@@ -131,7 +119,7 @@ async def main() -> None:
             print(f"[buffer] {buffer}")
 
             lower = buffer.lower()
-            if _stress_triggers_critical(lower):
+            if transcript_critical_stress(lower):
                 now = time.time()
                 if now - last_critical_at >= critical_cooldown_s:
                     print("STRESS_LEVEL: CRITICAL")

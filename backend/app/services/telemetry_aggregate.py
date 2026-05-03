@@ -65,6 +65,35 @@ def _agonal_hint(text: str) -> Optional[str]:
     return None
 
 
+def transcript_critical_stress(buffer: str) -> bool:
+    """
+    Panic / life-threat language in the rolling transcript (hackathon heuristic).
+    Shared with `scripts.mic_deepgram_stress_test` for consistent UX.
+    """
+    low = buffer.lower()
+    if "not breathing" in low or "isn't breathing" in low:
+        return True
+    if "help me" in low and ("god" in low or "please" in low or "not" in low):
+        return True
+    if "oh my god" in low and ("breathing" in low or "help" in low):
+        return True
+    if "he's dying" in low or "she's dying" in low:
+        return True
+    return False
+
+
+def _bystander_stress_payload(buffer: str) -> Optional[dict[str, Any]]:
+    """Maps transcript to optional `bystander_stress` dict for broadcast (BystanderStress)."""
+    if not buffer.strip():
+        return None
+    if transcript_critical_stress(buffer):
+        return {"score": 0.95, "label": "critical_panic", "confidence": 0.82}
+    low = buffer.lower()
+    if "help" in low or "please" in low or "hurry" in low:
+        return {"score": 0.48, "label": "elevated_distress", "confidence": 0.45}
+    return None
+
+
 def _safe_import_broadcaster() -> tuple[Optional[Any], Optional[Any]]:
     """
     Hacker 4 owns app/services/broadcast.py. This import should succeed once they land it.
@@ -93,12 +122,9 @@ def build_telemetry_payload(
     hazards: list[dict[str, Any]] = state.latest_vision.get("hazards", []) if isinstance(state.latest_vision.get("hazards"), list) else []
     alert: str = state.latest_vision.get("ai_dispatcher_alert", "No obvious scene hazards detected.")
 
-    vision_rr = int(vitals.get("estimated_respiratory_rate") or 0)
+    # Vision does not supply RR (single frame); only transcript "breathe" cadence fills RR here.
     breathe_rr = estimated_rr_from_breathe_timestamps(state.last_breathe_timestamps_s)
-    if vision_rr <= 0 and breathe_rr > 0:
-        vitals["estimated_respiratory_rate"] = breathe_rr
-    else:
-        vitals["estimated_respiratory_rate"] = vision_rr
+    vitals["estimated_respiratory_rate"] = breathe_rr
 
     agonal = _agonal_hint(state.transcript_buffer)
     if agonal and alert.lower() == "no obvious scene hazards detected.":
@@ -120,6 +146,9 @@ def build_telemetry_payload(
         "cyanosis_detected": bool(state.latest_vision.get("cyanosis_detected", False)),
         "bystander_action": state.latest_vision.get("bystander_action", "unknown"),
     }
+    stress = _bystander_stress_payload(state.transcript_buffer)
+    if stress is not None:
+        payload["bystander_stress"] = stress
     return payload
 
 
